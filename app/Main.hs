@@ -145,7 +145,10 @@ fileLanguage p
     | p =~ ("\\.sh$"     :: B.ByteString) = Shell
     | p =~ ("\\.sql$"    :: B.ByteString) = SQL
     | p =~ ("\\.xml$"    :: B.ByteString) = XML
+
     | p =~ ("\\.yaml$"   :: B.ByteString) = Yaml
+    | p =~ ("\\.yml$"    :: B.ByteString) = Yaml
+
     | p =~ ("\\.zsh$"    :: B.ByteString) = Zsh
 
     | p =~ ("\\.txt$"    :: B.ByteString) = Text
@@ -156,22 +159,22 @@ fileLanguage p
 -- Comment parsing is buggy, yes. And butt ugly too.
 langRXs :: Language -> ([B.ByteString], (B.ByteString, B.ByteString))
 langRXs Ada = (["^[ \\t]*--"], ("a^", "a^"))
-langRXs C = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs C = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
 langRXs Cabal = (["^\\s*--"], ("a^", "a^"))
-langRXs CSharp = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs Cplusplus = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs CSharp = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs Cplusplus = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
 langRXs CoffeeScript = (["^[ \\t]#"], ("^[ \\t]*###", "^[ \\t]*###"))
-langRXs CSS = (["^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs Go = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs CSS = (["^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs Go = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
 langRXs Haskell = (["^[ \\t]*--"], ("a^", "a^"))
 langRXs HTML = (["^[ \\t]*<!--.*-->[ \\t]*$"], ("<!--", "-->"))
-langRXs Java = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs JavaScript = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs Java = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs JavaScript = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
 langRXs JSON = (["a^"], ("a^", "a^"))
 langRXs Lisp = (["^[ \\t]*;", "^[ \\t]*;;", "^[ \\t]*;;;", "^[ \\t]*;;;;"], ("a^", "a^"))
 langRXs Perl = (["^[ \\t]*#"], ("a^", "a^"))
 
-langRXs PHP = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs PHP = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
 
 langRXs Python = (["^[ \\t]*#"], ("a^", "a^"))
 langRXs Ruby = (["^[ \\t]*#"], ("a^", "a^"))
@@ -228,8 +231,8 @@ main = do
     let stats = mconcat css
 
     putStrLn $ "All lines:       " ++ show (csNumLines stats)
-    putStrLn $ "Comments:        " ++ show (csNumComments stats)
     putStrLn $ "Empty lines:     " ++ show (csNumEmptyNonComment stats)
+    putStrLn $ "Comments:        " ++ show (csNumComments stats)
     putStrLn $ "Effective lines: " ++ show (csNumEffectiveLines stats)
     putStrLn $ "Repeating lines: " ++ show (csNumRepeated stats)
     putStrLn $ "Repetitions:     " ++ show (csNumRepetitions stats)
