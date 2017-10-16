@@ -13,11 +13,6 @@ import qualified Data.ByteString.Char8 as B
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
 
-
---import qualified Data.ByteString.Char8 as B
---import Text.Regex.Base.RegexLike
---import Text.Regex.TDFA.ByteString
-
 import Text.Regex.TDFA
 import Text.Printf
 
@@ -40,6 +35,7 @@ data Language
     | HTML
     | Java
     | JavaScript
+    | JSON
     | Lisp
     | Perl
     | PHP
@@ -100,7 +96,7 @@ csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
 csNetLines :: CodeStats -> Int
-csNetLines cs = csNumEffectiveLines cs - csNumRepetitions cs
+csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k =~ rxEmpty) then Just (e, c) else Nothing) $ csLines cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
 csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
@@ -132,6 +128,7 @@ fileLanguage p
     | p =~ ("\\.html$"   :: B.ByteString) = HTML
     | p =~ ("\\.java$"   :: B.ByteString) = Java
     | p =~ ("\\.js$"     :: B.ByteString) = JavaScript
+    | p =~ ("\\.json$"   :: B.ByteString) = JSON
 
     | p =~ ("\\.el$"     :: B.ByteString) = Lisp
     | p =~ ("\\.lisp$"   :: B.ByteString) = Lisp
@@ -156,35 +153,56 @@ fileLanguage p
 
     | otherwise = Other
 
+-- Comment parsing is buggy, yes. And butt ugly too.
 langRXs :: Language -> ([B.ByteString], (B.ByteString, B.ByteString))
-langRXs Ada = (["$^"], ("$^", "$^"))
-langRXs C = (["$^"], ("$^", "$^"))
-langRXs Cabal = (["$^"], ("$^", "$^"))
-langRXs CSharp = (["$^"], ("$^", "$^"))
-langRXs Cplusplus = (["$^"], ("$^", "$^"))
-langRXs CoffeeScript = (["$^"], ("$^", "$^"))
-langRXs CSS = (["$^"], ("$^", "$^"))
-langRXs Go = (["$^"], ("$^", "$^"))
-langRXs Haskell = (["$^"], ("$^", "$^"))
-langRXs HTML = (["$^"], ("$^", "$^"))
-langRXs Java = (["$^"], ("$^", "$^"))
-langRXs JavaScript = (["$^"], ("$^", "$^"))
-langRXs Lisp = (["$^"], ("$^", "$^"))
-langRXs Perl = (["$^"], ("$^", "$^"))
-langRXs PHP = (["$^"], ("$^", "$^"))
-langRXs Python = (["$^"], ("$^", "$^"))
-langRXs Ruby = (["$^"], ("$^", "$^"))
-langRXs Shell = (["$^"], ("$^", "$^"))
-langRXs SQL = (["$^"], ("$^", "$^"))
-langRXs XML = (["$^"], ("$^", "$^"))
-langRXs Yaml = (["$^"], ("$^", "$^"))
-langRXs Zsh = (["$^"], ("$^", "$^"))
-langRXs Text = (["$^"], ("$^", "$^"))
-langRXs Other = (["$^"], ("$^", "$^"))
+langRXs Ada = (["a^"], ("a^", "a^"))
+langRXs C = (["a^"], ("a^", "a^"))
+langRXs Cabal = (["a^"], ("a^", "a^"))
+langRXs CSharp = (["a^"], ("a^", "a^"))
+langRXs Cplusplus = (["a^"], ("a^", "a^"))
+langRXs CoffeeScript = (["a^"], ("a^", "a^"))
+langRXs CSS = (["a^"], ("a^", "a^"))
+langRXs Go = (["a^"], ("a^", "a^"))
+langRXs Haskell = (["^\\s*--"], ("a^", "a^"))
+langRXs HTML = (["a^"], ("a^", "a^"))
+langRXs Java = (["a^"], ("a^", "a^"))
+langRXs JavaScript = (["a^"], ("a^", "a^"))
+langRXs JSON = (["a^"], ("a^", "a^"))
+langRXs Lisp = (["a^"], ("a^", "a^"))
+langRXs Perl = (["a^"], ("a^", "a^"))
+
+langRXs PHP = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/^[ \\t]*$"], ("/\\*", "\\*/"))
+
+langRXs Python = (["a^"], ("a^", "a^"))
+langRXs Ruby = (["a^"], ("a^", "a^"))
+langRXs Shell = (["a^"], ("a^", "a^"))
+langRXs SQL = (["a^"], ("a^", "a^"))
+langRXs XML = (["a^"], ("a^", "a^"))
+langRXs Yaml = (["a^"], ("a^", "a^"))
+langRXs Zsh = (["a^"], ("a^", "a^"))
+langRXs Text = (["a^"], ("a^", "a^"))
+langRXs Other = (["a^"], ("a^", "a^"))
 
 parseLines :: [B.ByteString] -> Bool -> [B.ByteString] -> (B.ByteString, B.ByteString) -> T.Trie (Int, Int)
 parseLines [] _ _ _ = mempty
-parseLines (l:ls) isPrevLineMlc slcs mlc = T.singleton l (1, 0) `mappend` parseLines ls undefined slcs mlc
+parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
+    if isPrevLineMlc
+    then
+        if l =~ mlcEnd
+        then
+            T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
+        else
+            T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc
+    else
+        if any (l =~) slcs
+        then
+            T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
+        else
+            if l =~ mlcStart
+            then
+                T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc -- TODO: this CAN be a code line
+            else
+                T.singleton l (1, 0) `mappend` parseLines ls False slcs mlc
 
 fileStats :: FilePath -> IO CodeStats
 fileStats p = do
@@ -202,7 +220,8 @@ fileStats p = do
 
 main :: IO ()
 main = do
-    paths <- walk "."
+    paths_ <- walk "."
+    let paths = filter (\p -> fileLanguage p /= Other) paths_
 
     css <- forM paths $ \p -> fileStats p
 
@@ -212,7 +231,7 @@ main = do
     putStrLn $ "Comments:        " ++ show (csNumComments stats)
     putStrLn $ "Empty lines:     " ++ show (csNumEmptyNonComment stats)
     putStrLn $ "Effective lines: " ++ show (csNumEffectiveLines stats)
-    putStrLn $ "Effective lines: " ++ show (csNumRepeated stats)
+    putStrLn $ "Repeating lines: " ++ show (csNumRepeated stats)
     putStrLn $ "Repetitions:     " ++ show (csNumRepetitions stats)
     putStrLn $ "Net lines:       " ++ show (csNetLines stats)
     putStrLn $ "Languages: " ++ L.intercalate ", " (map show (S.toList (csLanguages stats)))
