@@ -69,50 +69,56 @@
 ## Lisp
 
 * Ext: .lisp .lsp
-* Check:
-* Comment:
+* Check: -
+* Comment: ; ;; ;;; ;;;;
 
 ## Perl
 
-* Ext:
-* Check:
-* Comment:
+* Ext: .pl .pm
+* Check: or #! .* perl
+* Comment: #
 
 ## PHP
 
-* Ext:
-* Check:
-* Comment:
+* Ext: .php .phtml
+* Check: or #! php
+* Comment: // /**/ #
 
 ## Python
 
-* Ext:
-* Check:
-* Comment:
+* Ext: .py
+* Check: #! .* python
+* Comment: # """ ... """
 
 ## Ruby
 
-* Ext:
-* Check:
-* Comment:
+* Ext: .rb
+* Check: #! ... ruby
+* Comment: #
 
 ## Shell (bash, sh)
 
 * Ext: sh
 * Check: first line: #! .* /bash or /sh
-* Comment: /s*#/
+* Comment: #
 
 ## SQL
 
-* Ext:
-* Check:
-* Comment:
+* Ext: .sql
+* Check: -
+* Comment: --
 
 ## XML
 
-* Ext: xml
+* Ext: .xml
 * Check: -
 * Comment: between <!-- and -->
+
+## Yaml
+
+* Ext: .yaml
+* Check: -
+* Comment: #
 
 ## zsh
 
