@@ -8,12 +8,14 @@ import Lib
 import qualified Data.Trie as T
 import qualified Data.Set as S
 import qualified Data.List as L
+import Data.Maybe
 import qualified Data.ByteString.Char8 as B
 
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
 
-import Text.Regex.TDFA
+import Text.Regex.TDFA hiding (match)
+import Text.Regex.TDFA.ByteString
 import Text.Printf
 
 import Control.Monad
@@ -156,52 +158,59 @@ fileLanguage p
 
     | otherwise = Other
 
+fromRight (Right x) = x -- I know, I know.
+cpl :: B.ByteString -> Regex
+cpl s = fromRight $ compile defaultCompOpt defaultExecOpt s
+
+match :: B.ByteString -> Regex -> Bool
+match s r = isJust $ matchOnce r s
+
 -- Comment parsing is buggy, yes. And butt ugly too.
-langRXs :: Language -> ([B.ByteString], (B.ByteString, B.ByteString))
-langRXs Ada = (["^[ \\t]*--"], ("a^", "a^"))
-langRXs C = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs Cabal = (["^\\s*--"], ("a^", "a^"))
-langRXs CSharp = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs Cplusplus = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs CoffeeScript = (["^[ \\t]#"], ("^[ \\t]*###", "^[ \\t]*###"))
-langRXs CSS = (["^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs Go = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs Haskell = (["^[ \\t]*--"], ("a^", "a^"))
-langRXs HTML = (["^[ \\t]*<!--.*-->[ \\t]*$"], ("<!--", "-->"))
-langRXs Java = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs JavaScript = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
-langRXs JSON = (["a^"], ("a^", "a^"))
-langRXs Lisp = (["^[ \\t]*;", "^[ \\t]*;;", "^[ \\t]*;;;", "^[ \\t]*;;;;"], ("a^", "a^"))
-langRXs Perl = (["^[ \\t]*#"], ("a^", "a^"))
+langRXs :: Language -> ([Regex], (Regex, Regex))
+langRXs Ada = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+langRXs C = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs Cabal = ([cpl "^\\s*--"], (cpl "a^", cpl "a^"))
+langRXs CSharp = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs Cplusplus = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs CoffeeScript = ([cpl "^[ \\t]#"], (cpl "^[ \\t]*###", cpl "^[ \\t]*###"))
+langRXs CSS = ([cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs Go = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs Haskell = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+langRXs HTML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
+langRXs Java = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs JavaScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs JSON = ([cpl "a^"], (cpl "a^", cpl "a^"))
+langRXs Lisp = ([cpl "^[ \\t]*;", cpl "^[ \\t]*;;", cpl "^[ \\t]*;;;", cpl "^[ \\t]*;;;;"], (cpl "a^", cpl "a^"))
+langRXs Perl = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 
-langRXs PHP = (["^[ \\t]*//", "^[ \\t]*/\\*.*\\*/[ \\t]*$"], ("/\\*", "\\*/"))
+langRXs PHP = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 
-langRXs Python = (["^[ \\t]*#"], ("a^", "a^"))
-langRXs Ruby = (["^[ \\t]*#"], ("a^", "a^"))
-langRXs Shell = (["^[ \\t]*#"], ("a^", "a^"))
-langRXs SQL = (["^[ \\t]*--"], ("a^", "a^"))
-langRXs XML = (["^[ \\t]*<!--.*-->[ \\t]*$"], ("<!--", "-->"))
-langRXs Yaml = (["a^"], ("a^", "a^"))
-langRXs Zsh = (["^[ \\t]*#"], ("a^", "a^"))
-langRXs Text = ([], ("a^", "a^"))
-langRXs Other = ([], ("a^", "a^"))
+langRXs Python = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+langRXs Ruby = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+langRXs Shell = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+langRXs SQL = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+langRXs XML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
+langRXs Yaml = ([cpl "a^"], (cpl "a^", cpl "a^"))
+langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+langRXs Text = ([], (cpl "a^", cpl "a^"))
+langRXs Other = ([], (cpl "a^", cpl "a^"))
 
-parseLines :: [B.ByteString] -> Bool -> [B.ByteString] -> (B.ByteString, B.ByteString) -> T.Trie (Int, Int)
+parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie (Int, Int)
 parseLines [] _ _ _ = mempty
 parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
     if isPrevLineMlc
     then
-        if l =~ mlcEnd
+        if l `match` mlcEnd
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
             T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc
     else
-        if any (l =~) slcs
+        if any (match l) slcs
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
-            if l =~ mlcStart
+            if l `match` mlcStart
             then
                 T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc -- TODO: this CAN be a code line
             else
