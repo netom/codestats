@@ -1,21 +1,31 @@
 {-# Language RecordWildCards, DeriveGeneric, OverloadedStrings #-}
 module Main where
 
+import Prelude hiding (lines, readFile)
+
 import Lib
-import Data.Trie
+
+import qualified Data.Trie as T
+import qualified Data.Set as S
+import qualified Data.List as L
+import qualified Data.ByteString.Char8 as B
+
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
-import Prelude hiding (lines, readFile)
-import Data.ByteString.Char8 (ByteString, readFile, lines)
+
+
 --import qualified Data.ByteString.Char8 as B
 --import Text.Regex.Base.RegexLike
 --import Text.Regex.TDFA.ByteString
+
 import Text.Regex.TDFA
+import Text.Printf
+
 import Control.Monad
+
 import System.Directory
 import System.FilePath
 import System.Posix.Files
-import qualified Data.Set as S
 
 data Language
     = Ada
@@ -49,7 +59,7 @@ instance Monoid Int where
     mappend = (+)
 
 data CodeStats = CodeStats
-    { csLines       :: Trie (Int, Int) -- Lines, and how many times they occur as fst: effective lines snd: comments
+    { csLines       :: T.Trie (Int, Int) -- Lines, and how many times they occur as fst: effective lines snd: comments
     , csLanguages   :: S.Set Language    -- Set of the names of the recognized programming languages used
     } deriving (Show, Generic)
 
@@ -57,40 +67,40 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
-rxEmpty = "^\\s*$" :: ByteString
+rxEmpty = "^\\s*$" :: B.ByteString
 
 -- Number of every code lines in a file or set of files (project)
 csNumLines :: CodeStats -> Int
-csNumLines cs = sum $ map (\(e, c) -> e + c) $ elems $ csLines cs
+csNumLines cs = sum $ map (\(e, c) -> e + c) $ T.elems $ csLines cs
 
 -- Number of lines containint only comments and maybe whitespace
 csNumComments :: CodeStats -> Int
-csNumComments cs = sum $ map (\(_, c) -> c) $ elems $ csLines cs
+csNumComments cs = sum $ map (\(_, c) -> c) $ T.elems $ csLines cs
  
 -- Number of non-comment lines containing only whitespace
 csNumEmptyNonComment :: CodeStats -> Int
-csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ elems $ mapBy (\k v -> if k =~ rxEmpty then Just v else Nothing) $ csLines cs
+csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k =~ rxEmpty then Just v else Nothing) $ csLines cs
 
 -- Number of effective line: those that are non-comment and non-whitespace
-csEffectiveLines :: CodeStats -> Int
-csEffectiveLines cs = csNumLines cs - csNumComments cs - csNumEmptyNonComment cs
+csNumEffectiveLines :: CodeStats -> Int
+csNumEffectiveLines cs = csNumLines cs - csNumComments cs - csNumEmptyNonComment cs
 
 -- Lines that are appearing more than once as a non-comment line
 -- This function disregards programming language
-csRepeated :: CodeStats -> Trie (Int, Int)
-csRepeated cs = filterMap (\(e, c) -> if e > 1 then Just (e, c) else Nothing) $ csLines cs
+csRepeated :: CodeStats -> T.Trie (Int, Int)
+csRepeated cs = T.filterMap (\(e, c) -> if e > 1 then Just (e, c) else Nothing) $ csLines cs
 
 -- Number of distinct, repeated, non-comment lines
 csNumRepeated :: CodeStats -> Int
-csNumRepeated cs = size $ csRepeated cs
+csNumRepeated cs = T.size $ csRepeated cs
 
 -- Number of repeatitions with multiplicity (non-comment lines)
 csNumRepetitions :: CodeStats -> Int
-csNumRepetitions cs = sum $ map fst $ elems $ csRepeated cs
+csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
 csNetLines :: CodeStats -> Int
-csNetLines cs = csEffectiveLines cs - csNumRepetitions cs
+csNetLines cs = csNumEffectiveLines cs - csNumRepetitions cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
 csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
@@ -110,57 +120,99 @@ walk top = do
 
 fileLanguage :: FilePath -> Language
 fileLanguage p
-    | p =~ ("\\.ada$" :: ByteString)   = Ada
-    | p =~ ("\\.c$" :: ByteString)     = C
-    | p =~ ("\\.cabal$" :: ByteString) = Cabal
-    | p =~ ("\\.cs$" :: ByteString)    = CSharp
-    | p =~ ("\\.cpp$" :: ByteString)   = Cplusplus
-    | p =~ ("\\.coffee$" :: ByteString)= CoffeeScript
-    | p =~ ("\\.css$" :: ByteString)   = CSS
-    | p =~ ("\\.go$" :: ByteString)    = Go
-    | p =~ ("\\.hs$" :: ByteString)    = Haskell
-    | p =~ ("\\.html$" :: ByteString)  = HTML
-    | p =~ ("\\.java$" :: ByteString)  = Java
-    | p =~ ("\\.js$" :: ByteString)    = JavaScript
+    | p =~ ("\\.ada$"    :: B.ByteString) = Ada
+    | p =~ ("\\.c$"      :: B.ByteString) = C
+    | p =~ ("\\.cabal$"  :: B.ByteString) = Cabal
+    | p =~ ("\\.cs$"     :: B.ByteString) = CSharp
+    | p =~ ("\\.cpp$"    :: B.ByteString) = Cplusplus
+    | p =~ ("\\.coffee$" :: B.ByteString) = CoffeeScript
+    | p =~ ("\\.css$"    :: B.ByteString) = CSS
+    | p =~ ("\\.go$"     :: B.ByteString) = Go
+    | p =~ ("\\.hs$"     :: B.ByteString) = Haskell
+    | p =~ ("\\.html$"   :: B.ByteString) = HTML
+    | p =~ ("\\.java$"   :: B.ByteString) = Java
+    | p =~ ("\\.js$"     :: B.ByteString) = JavaScript
 
-    | p =~ ("\\.el$" :: ByteString)    = Lisp
-    | p =~ ("\\.lisp$" :: ByteString)  = Lisp
-    | p =~ ("\\.cl$" :: ByteString)    = Lisp
+    | p =~ ("\\.el$"     :: B.ByteString) = Lisp
+    | p =~ ("\\.lisp$"   :: B.ByteString) = Lisp
+    | p =~ ("\\.cl$"     :: B.ByteString) = Lisp
 
-    | p =~ ("\\.pl$" :: ByteString)    = Perl
-    | p =~ ("\\.pm$" :: ByteString)    = Perl
+    | p =~ ("\\.pl$"     :: B.ByteString) = Perl
+    | p =~ ("\\.pm$"     :: B.ByteString) = Perl
 
-    | p =~ ("\\.php$" :: ByteString)   = PHP
-    | p =~ ("\\.phtml$" :: ByteString) = PHP
+    | p =~ ("\\.php$"    :: B.ByteString) = PHP
+    | p =~ ("\\.phtml$"  :: B.ByteString) = PHP
 
-    | p =~ ("\\.py$" :: ByteString)    = Python
-    | p =~ ("\\.rb$" :: ByteString)    = Ruby
-    | p =~ ("\\.sh$" :: ByteString)    = Shell
-    | p =~ ("\\.sql$" :: ByteString)   = SQL
-    | p =~ ("\\.xml$" :: ByteString)   = XML
-    | p =~ ("\\.yaml$" :: ByteString)  = Yaml
-    | p =~ ("\\.zsh$" :: ByteString)   = Zsh
+    | p =~ ("\\.py$"     :: B.ByteString) = Python
+    | p =~ ("\\.rb$"     :: B.ByteString) = Ruby
+    | p =~ ("\\.sh$"     :: B.ByteString) = Shell
+    | p =~ ("\\.sql$"    :: B.ByteString) = SQL
+    | p =~ ("\\.xml$"    :: B.ByteString) = XML
+    | p =~ ("\\.yaml$"   :: B.ByteString) = Yaml
+    | p =~ ("\\.zsh$"    :: B.ByteString) = Zsh
 
-    | p =~ ("\\.txt$" :: ByteString)   = Text
-    | p =~ ("\\.md$" :: ByteString)    = Text
+    | p =~ ("\\.txt$"    :: B.ByteString) = Text
+    | p =~ ("\\.md$"     :: B.ByteString) = Text
 
     | otherwise = Other
 
+langRXs :: Language -> ([B.ByteString], (B.ByteString, B.ByteString))
+langRXs Ada = (["$^"], ("$^", "$^"))
+langRXs C = (["$^"], ("$^", "$^"))
+langRXs Cabal = (["$^"], ("$^", "$^"))
+langRXs CSharp = (["$^"], ("$^", "$^"))
+langRXs Cplusplus = (["$^"], ("$^", "$^"))
+langRXs CoffeeScript = (["$^"], ("$^", "$^"))
+langRXs CSS = (["$^"], ("$^", "$^"))
+langRXs Go = (["$^"], ("$^", "$^"))
+langRXs Haskell = (["$^"], ("$^", "$^"))
+langRXs HTML = (["$^"], ("$^", "$^"))
+langRXs Java = (["$^"], ("$^", "$^"))
+langRXs JavaScript = (["$^"], ("$^", "$^"))
+langRXs Lisp = (["$^"], ("$^", "$^"))
+langRXs Perl = (["$^"], ("$^", "$^"))
+langRXs PHP = (["$^"], ("$^", "$^"))
+langRXs Python = (["$^"], ("$^", "$^"))
+langRXs Ruby = (["$^"], ("$^", "$^"))
+langRXs Shell = (["$^"], ("$^", "$^"))
+langRXs SQL = (["$^"], ("$^", "$^"))
+langRXs XML = (["$^"], ("$^", "$^"))
+langRXs Yaml = (["$^"], ("$^", "$^"))
+langRXs Zsh = (["$^"], ("$^", "$^"))
+langRXs Text = (["$^"], ("$^", "$^"))
+langRXs Other = (["$^"], ("$^", "$^"))
+
+parseLines :: [B.ByteString] -> Bool -> [B.ByteString] -> (B.ByteString, B.ByteString) -> T.Trie (Int, Int)
+parseLines [] _ _ _ = mempty
+parseLines (l:ls) isPrevLineMlc slcs mlc = T.singleton l (1, 0) `mappend` parseLines ls undefined slcs mlc
+
 fileStats :: FilePath -> IO CodeStats
 fileStats p = do
-    ls <- lines <$> readFile p
+    ls <- B.lines <$> B.readFile p
 
-    let csLines = fromList [("# comment", (0, 2)), ("print 'valami';", (2, 1))]
+    let lang = fileLanguage p
+
+    let langRX = langRXs lang
+
+    let csLines = parseLines ls False (fst langRX) (snd langRX)
+
     let csLanguages = S.fromList [fileLanguage p]
 
     return CodeStats{..}
 
 main :: IO ()
 main = do
-    let cs1 = CodeStats (fromList [("# comment", (0, 2)), ("print 'valami';", (2, 1))]) (S.fromList [PHP])
-    let cs2 = CodeStats (fromList [("# comment", (0, 1)), ("print 'valami';", (1, 0)), ("}", (1, 0))]) (S.fromList [JavaScript, Ada])
-
     paths <- walk "."
+
     css <- forM paths $ \p -> fileStats p
 
-    print $ mconcat css
+    let stats = mconcat css
+
+    putStrLn $ "All lines:       " ++ show (csNumLines stats)
+    putStrLn $ "Comments:        " ++ show (csNumComments stats)
+    putStrLn $ "Empty lines:     " ++ show (csNumEmptyNonComment stats)
+    putStrLn $ "Effective lines: " ++ show (csNumEffectiveLines stats)
+    putStrLn $ "Effective lines: " ++ show (csNumRepeated stats)
+    putStrLn $ "Repetitions:     " ++ show (csNumRepetitions stats)
+    putStrLn $ "Net lines:       " ++ show (csNetLines stats)
+    putStrLn $ "Languages: " ++ L.intercalate ", " (map show (S.toList (csLanguages stats)))
