@@ -65,7 +65,7 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
-rxEmpty = "^\\s*$" :: B.ByteString
+rxEmpty = cpl "^\\s*$"
 
 -- Number of every code lines in a file or set of files (project)
 csNumLines :: CodeStats -> Int
@@ -77,7 +77,7 @@ csNumComments cs = sum $ map (\(_, c) -> c) $ T.elems $ csLines cs
  
 -- Number of non-comment lines containing only whitespace
 csNumEmptyNonComment :: CodeStats -> Int
-csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k =~ rxEmpty then Just v else Nothing) $ csLines cs
+csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k `match` rxEmpty then Just v else Nothing) $ csLines cs
 
 -- Number of effective line: those that are non-comment and non-whitespace
 csNumEffectiveLines :: CodeStats -> Int
@@ -98,7 +98,7 @@ csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
 csNetLines :: CodeStats -> Int
-csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k =~ rxEmpty) then Just (e, c) else Nothing) $ csLines cs
+csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k `match` rxEmpty) then Just (e, c) else Nothing) $ csLines cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
 csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
@@ -116,54 +116,60 @@ walk top = do
               else return [path]
     return (concat paths)
 
-fileLanguage :: FilePath -> Language
-fileLanguage p
-    | p =~ ("\\.ada$"    :: B.ByteString) = Ada
-    | p =~ ("\\.c$"      :: B.ByteString) = C
-    | p =~ ("\\.cabal$"  :: B.ByteString) = Cabal
-    | p =~ ("\\.cs$"     :: B.ByteString) = CSharp
-    | p =~ ("\\.cpp$"    :: B.ByteString) = Cplusplus
-    | p =~ ("\\.coffee$" :: B.ByteString) = CoffeeScript
-    | p =~ ("\\.css$"    :: B.ByteString) = CSS
-    | p =~ ("\\.go$"     :: B.ByteString) = Go
-    | p =~ ("\\.hs$"     :: B.ByteString) = Haskell
-    | p =~ ("\\.html$"   :: B.ByteString) = HTML
-    | p =~ ("\\.java$"   :: B.ByteString) = Java
-    | p =~ ("\\.js$"     :: B.ByteString) = JavaScript
-    | p =~ ("\\.json$"   :: B.ByteString) = JSON
+-- I know, I know.
+fromRight (Right x) = x
 
-    | p =~ ("\\.el$"     :: B.ByteString) = Lisp
-    | p =~ ("\\.lisp$"   :: B.ByteString) = Lisp
-    | p =~ ("\\.cl$"     :: B.ByteString) = Lisp
-
-    | p =~ ("\\.pl$"     :: B.ByteString) = Perl
-    | p =~ ("\\.pm$"     :: B.ByteString) = Perl
-
-    | p =~ ("\\.php$"    :: B.ByteString) = PHP
-    | p =~ ("\\.phtml$"  :: B.ByteString) = PHP
-
-    | p =~ ("\\.py$"     :: B.ByteString) = Python
-    | p =~ ("\\.rb$"     :: B.ByteString) = Ruby
-    | p =~ ("\\.sh$"     :: B.ByteString) = Shell
-    | p =~ ("\\.sql$"    :: B.ByteString) = SQL
-    | p =~ ("\\.xml$"    :: B.ByteString) = XML
-
-    | p =~ ("\\.yaml$"   :: B.ByteString) = Yaml
-    | p =~ ("\\.yml$"    :: B.ByteString) = Yaml
-
-    | p =~ ("\\.zsh$"    :: B.ByteString) = Zsh
-
-    | p =~ ("\\.txt$"    :: B.ByteString) = Text
-    | p =~ ("\\.md$"     :: B.ByteString) = Text
-
-    | otherwise = Other
-
-fromRight (Right x) = x -- I know, I know.
+-- Compiles a regex
 cpl :: B.ByteString -> Regex
 cpl s = fromRight $ compile defaultCompOpt defaultExecOpt s
 
+-- Dummy match `operator`
 match :: B.ByteString -> Regex -> Bool
 match s r = isJust $ matchOnce r s
+
+fileLanguage :: FilePath -> Language
+fileLanguage p
+    | bsp `match` (cpl "\\.ada$"    ) = Ada
+    | bsp `match` (cpl "\\.c$"      ) = C
+    | bsp `match` (cpl "\\.cabal$"  ) = Cabal
+    | bsp `match` (cpl "\\.cs$"     ) = CSharp
+    | bsp `match` (cpl "\\.cpp$"    ) = Cplusplus
+    | bsp `match` (cpl "\\.coffee$" ) = CoffeeScript
+    | bsp `match` (cpl "\\.css$"    ) = CSS
+    | bsp `match` (cpl "\\.go$"     ) = Go
+    | bsp `match` (cpl "\\.hs$"     ) = Haskell
+    | bsp `match` (cpl "\\.html$"   ) = HTML
+    | bsp `match` (cpl "\\.java$"   ) = Java
+    | bsp `match` (cpl "\\.js$"     ) = JavaScript
+    | bsp `match` (cpl "\\.json$"   ) = JSON
+
+    | bsp `match` (cpl "\\.el$"     ) = Lisp
+    | bsp `match` (cpl "\\.lisp$"   ) = Lisp
+    | bsp `match` (cpl "\\.cl$"     ) = Lisp
+
+    | bsp `match` (cpl "\\.pl$"     ) = Perl
+    | bsp `match` (cpl "\\.pm$"     ) = Perl
+
+    | bsp `match` (cpl "\\.php$"    ) = PHP
+    | bsp `match` (cpl "\\.phtml$"  ) = PHP
+
+    | bsp `match` (cpl "\\.py$"     ) = Python
+    | bsp `match` (cpl "\\.rb$"     ) = Ruby
+    | bsp `match` (cpl "\\.sh$"     ) = Shell
+    | bsp `match` (cpl "\\.sql$"    ) = SQL
+    | bsp `match` (cpl "\\.xml$"    ) = XML
+
+    | bsp `match` (cpl "\\.yaml$"   ) = Yaml
+    | bsp `match` (cpl "\\.yml$"    ) = Yaml
+
+    | bsp `match` (cpl "\\.zsh$"    ) = Zsh
+
+    | bsp `match` (cpl "\\.txt$"    ) = Text
+    | bsp `match` (cpl "\\.md$"     ) = Text
+
+    | otherwise = Other
+    where
+        bsp = B.pack p
 
 -- Comment parsing is buggy, yes. And butt ugly too.
 langRXs :: Language -> ([Regex], (Regex, Regex))
@@ -240,8 +246,8 @@ main = do
     let stats = mconcat css
 
     putStrLn $ "All lines:       " ++ show (csNumLines stats)
-    putStrLn $ "Empty lines:     " ++ show (csNumEmptyNonComment stats)
     putStrLn $ "Comments:        " ++ show (csNumComments stats)
+    putStrLn $ "Empty lines:     " ++ show (csNumEmptyNonComment stats)
     putStrLn $ "Effective lines: " ++ show (csNumEffectiveLines stats)
     putStrLn $ "Repeating lines: " ++ show (csNumRepeated stats)
     putStrLn $ "Repetitions:     " ++ show (csNumRepetitions stats)
