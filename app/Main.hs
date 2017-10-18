@@ -8,8 +8,10 @@ import Lib
 import qualified Data.Trie as T
 import qualified Data.Set as S
 import qualified Data.List as L
-import Data.Maybe
+import qualified Data.Maybe as M
 import qualified Data.ByteString.Char8 as B
+import qualified Data.Attoparsec.ByteString.Char8 as P
+import Data.Char
 
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
@@ -18,6 +20,7 @@ import Text.Regex.TDFA hiding (match)
 import Text.Regex.TDFA.ByteString
 import Text.Printf
 
+import Control.Applicative
 import Control.Monad
 
 import System.Directory
@@ -56,6 +59,17 @@ instance Monoid Int where
     mempty  = 0
     mappend = (+)
 
+-- Number of files
+-- Stats per file, per language
+-- Report unkown files
+
+data Line = Line
+    { lContent   :: B.ByteString
+    , lIsEmpty   :: Bool
+    , lIsComment :: Bool
+    , lIsCode    :: Bool
+    } deriving (Show)
+
 data CodeStats = CodeStats
     { csLines       :: T.Trie (Int, Int) -- Lines, and how many times they occur as fst: effective lines snd: comments
     , csLanguages   :: S.Set Language    -- Set of the names of the recognized programming languages used
@@ -64,6 +78,27 @@ data CodeStats = CodeStats
 instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
+
+parseLine' :: P.Parser [Line]
+parseLine' = do
+    end <- P.atEnd
+
+    if end
+    then
+        return []
+    else do
+        ss <- P.takeWhile (P.isHorizontalSpace . fromIntegral . ord)
+
+        rem <- B.pack <$> P.manyTill P.anyChar (P.endOfLine <|> P.endOfInput)
+
+        more <- parseLine'
+
+        if B.length rem > 0
+        then
+            return $ Line "" False False True : more
+        else
+            return $ Line ss True False True : more
+    
 
 rxEmpty = cpl "^\\s*$"
 
@@ -77,7 +112,7 @@ csNumComments cs = sum $ map (\(_, c) -> c) $ T.elems $ csLines cs
  
 -- Number of non-comment lines containing only whitespace
 csNumEmptyNonComment :: CodeStats -> Int
-csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k `match` rxEmpty then Just v else Nothing) $ csLines cs
+csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k `mtch` rxEmpty then Just v else Nothing) $ csLines cs
 
 -- Number of effective line: those that are non-comment and non-whitespace
 csNumEffectiveLines :: CodeStats -> Int
@@ -98,7 +133,7 @@ csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
 csNetLines :: CodeStats -> Int
-csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k `match` rxEmpty) then Just (e, c) else Nothing) $ csLines cs
+csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k `mtch` rxEmpty) then Just (e, c) else Nothing) $ csLines cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
 csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
@@ -124,52 +159,55 @@ cpl :: B.ByteString -> Regex
 cpl s = fromRight $ compile defaultCompOpt defaultExecOpt s
 
 -- Dummy match `operator`
-match :: B.ByteString -> Regex -> Bool
-match s r = isJust $ matchOnce r s
+mtch :: B.ByteString -> Regex -> Bool
+mtch s r = M.isJust $ matchOnce r s
 
-fileLanguage :: FilePath -> Language
-fileLanguage p
-    | bsp `match` (cpl "\\.ada$"    ) = Ada
-    | bsp `match` (cpl "\\.c$"      ) = C
-    | bsp `match` (cpl "\\.cabal$"  ) = Cabal
-    | bsp `match` (cpl "\\.cs$"     ) = CSharp
-    | bsp `match` (cpl "\\.cpp$"    ) = Cplusplus
-    | bsp `match` (cpl "\\.coffee$" ) = CoffeeScript
-    | bsp `match` (cpl "\\.css$"    ) = CSS
-    | bsp `match` (cpl "\\.go$"     ) = Go
-    | bsp `match` (cpl "\\.hs$"     ) = Haskell
-    | bsp `match` (cpl "\\.html$"   ) = HTML
-    | bsp `match` (cpl "\\.java$"   ) = Java
-    | bsp `match` (cpl "\\.js$"     ) = JavaScript
-    | bsp `match` (cpl "\\.json$"   ) = JSON
+langsByExtensions :: [(B.ByteString, Language)]
+langsByExtensions =
+    [ (".ada", Ada)
+    , (".c", C)
+    , (".cabal", Cabal)
+    , (".cs", CSharp)
+    , (".cpp", Cplusplus)
+    , (".coffee", CoffeeScript)
+    , (".css", CSS)
+    , (".go", Go)
+    , (".hs", Haskell)
+    , (".html", HTML)
+    , (".java", Java)
+    , (".js", JavaScript)
+    , (".json", JSON)
 
-    | bsp `match` (cpl "\\.el$"     ) = Lisp
-    | bsp `match` (cpl "\\.lisp$"   ) = Lisp
-    | bsp `match` (cpl "\\.cl$"     ) = Lisp
+    , (".el", Lisp)
+    , (".lisp", Lisp)
+    , (".cl", Lisp)
 
-    | bsp `match` (cpl "\\.pl$"     ) = Perl
-    | bsp `match` (cpl "\\.pm$"     ) = Perl
+    , (".pl", Perl)
+    , (".pm", Perl)
 
-    | bsp `match` (cpl "\\.php$"    ) = PHP
-    | bsp `match` (cpl "\\.phtml$"  ) = PHP
+    , (".php", PHP)
+    , (".phtml", PHP)
 
-    | bsp `match` (cpl "\\.py$"     ) = Python
-    | bsp `match` (cpl "\\.rb$"     ) = Ruby
-    | bsp `match` (cpl "\\.sh$"     ) = Shell
-    | bsp `match` (cpl "\\.sql$"    ) = SQL
-    | bsp `match` (cpl "\\.xml$"    ) = XML
+    , (".py", Python)
+    , (".rb", Ruby)
+    , (".sh", Shell)
+    , (".sql", SQL)
+    , (".xml", XML)
 
-    | bsp `match` (cpl "\\.yaml$"   ) = Yaml
-    | bsp `match` (cpl "\\.yml$"    ) = Yaml
+    , (".yaml", Yaml)
+    , (".yml", Yaml)
 
-    | bsp `match` (cpl "\\.zsh$"    ) = Zsh
+    , (".zsh", Zsh)
 
-    | bsp `match` (cpl "\\.txt$"    ) = Text
-    | bsp `match` (cpl "\\.md$"     ) = Text
+    , (".txt", Text)
+    , (".md", Text)
+    ]
 
-    | otherwise = Other
-    where
-        bsp = B.pack p
+fileLanguage :: B.ByteString -> Language
+fileLanguage p =
+    case dropWhile (\(ext, _) -> not $ B.isSuffixOf ext p) langsByExtensions of
+    ((_,l):_) -> l
+    []        -> Other
 
 -- Comment parsing is buggy, yes. And butt ugly too.
 langRXs :: Language -> ([Regex], (Regex, Regex))
@@ -206,42 +244,43 @@ parseLines [] _ _ _ = mempty
 parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
     if isPrevLineMlc
     then
-        if l `match` mlcEnd
+        if l `mtch` mlcEnd
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
             T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc
     else
-        if any (match l) slcs
+        if any (mtch l) slcs
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
-            if l `match` mlcStart
+            if l `mtch` mlcStart
             then
                 T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc -- TODO: this CAN be a code line
             else
                 T.singleton l (1, 0) `mappend` parseLines ls False slcs mlc
 
-fileStats :: FilePath -> IO CodeStats
-fileStats p = do
+fileStats :: FilePath -> Language -> IO CodeStats
+fileStats p lang = do
     ls <- B.lines <$> B.readFile p
 
-    let lang = fileLanguage p
+    let lang = fileLanguage $ B.pack p
 
     let langRX = langRXs lang
 
     let csLines = parseLines ls False (fst langRX) (snd langRX)
 
-    let csLanguages = S.fromList [fileLanguage p]
+    let csLanguages = S.fromList [lang]
 
     return CodeStats{..}
 
 main :: IO ()
 main = do
-    paths_ <- walk "."
-    let paths = filter (\p -> fileLanguage p /= Other) paths_
+    paths <- walk "."
 
-    css <- forM paths $ \p -> fileStats p
+    let pathsLangs = filter (\(p,l) -> l /= Other) $ map (\p -> (p, fileLanguage (B.pack p))) paths
+
+    css <- forM pathsLangs $ \(p,l) -> fileStats p l
 
     let stats = mconcat css
 
