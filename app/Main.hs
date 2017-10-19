@@ -63,11 +63,15 @@ instance Monoid Int where
 -- Stats per file, per language
 -- Report unkown files
 
+data LineStats = LineStats
+    { lsEmpty   :: Int
+    , lsComment :: Int
+    , lsCode    :: Int
+    } deriving (Show)
+
 data Line = Line
-    { lContent   :: B.ByteString
-    , lIsEmpty   :: Bool
-    , lIsComment :: Bool
-    , lIsCode    :: Bool
+    { lContent :: B.ByteString
+    , lStats   :: LineStats
     } deriving (Show)
 
 data CodeStats = CodeStats
@@ -79,6 +83,17 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
+parseTillEol :: P.Parser B.ByteString
+parseTillEol =  B.pack <$> P.manyTill P.anyChar (P.endOfLine <|> P.endOfInput)
+
+-- //
+parseCpp :: P.Parser B.ByteString
+parseCpp = P.string "//" <> parseTillEol
+
+-- /* */
+parseC :: P.Parser B.ByteString
+parseC = P.string "/*" <> (B.pack <$> P.manyTill P.anyChar (P.string "*/"))
+
 parseLine' :: P.Parser [Line]
 parseLine' = do
     end <- P.atEnd
@@ -89,16 +104,15 @@ parseLine' = do
     else do
         ss <- P.takeWhile (P.isHorizontalSpace . fromIntegral . ord)
 
-        rem <- B.pack <$> P.manyTill P.anyChar (P.endOfLine <|> P.endOfInput)
+        rem <- parseCpp
 
         more <- parseLine'
 
         if B.length rem > 0
         then
-            return $ Line "" False False True : more
+            return $ Line "" (LineStats 1 0 0) : more
         else
-            return $ Line ss True False True : more
-    
+            return $ Line ss (LineStats 0 0 1) : more
 
 rxEmpty = cpl "^\\s*$"
 
