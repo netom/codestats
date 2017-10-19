@@ -22,7 +22,7 @@ library
 executable codestats
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -Wall -fno-warn-orphans -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , codestats
                      , generic-deriving
@@ -34,7 +34,6 @@ executable codestats
                      , directory
                      , unix
                      , containers
-                     , attoparsec
   default-language:    Haskell2010
 
 test-suite codestats-test
@@ -43,7 +42,7 @@ test-suite codestats-test
   main-is:             Spec.hs
   build-depends:       base
                      , codestats
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -Wall -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
 
 source-repository head

@@ -3,24 +3,20 @@ module Main where
 
 import Prelude hiding (lines, readFile)
 
-import Lib
+--import Lib
 
 import qualified Data.Trie as T
 import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Maybe as M
 import qualified Data.ByteString.Char8 as B
-import qualified Data.Attoparsec.ByteString.Char8 as P
-import Data.Char
 
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
 
 import Text.Regex.TDFA hiding (match)
 import Text.Regex.TDFA.ByteString
-import Text.Printf
 
-import Control.Applicative
 import Control.Monad
 
 import System.Directory
@@ -83,38 +79,44 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
-parseTillEol :: P.Parser B.ByteString
-parseTillEol =  B.pack <$> P.manyTill P.anyChar (P.endOfLine <|> P.endOfInput)
+-- I know, I know.
+fromRight :: Either a b -> b
+fromRight (Right x) = x
+fromRight (Left _) = error "FAIL."
 
--- //
-parseCpp :: P.Parser B.ByteString
-parseCpp = P.string "//" <> parseTillEol
+-- Compiles a regex
+-- Since it uses fromRight, EVERY regex must be tested so we can be sure they compile.
+cpl :: B.ByteString -> Regex
+cpl s = fromRight $ compile defaultCompOpt defaultExecOpt s
 
--- /* */
-parseC :: P.Parser B.ByteString
-parseC = P.string "/*" <> (B.pack <$> P.manyTill P.anyChar (P.string "*/"))
+-- Dummy match `operator`
+mtch :: B.ByteString -> Regex -> Bool
+mtch s r = M.isJust $ matchOnce r s
 
-parseLine' :: P.Parser [Line]
-parseLine' = do
-    end <- P.atEnd
-
-    if end
-    then
-        return []
-    else do
-        ss <- P.takeWhile (P.isHorizontalSpace . fromIntegral . ord)
-
-        rem <- parseCpp
-
-        more <- parseLine'
-
-        if B.length rem > 0
-        then
-            return $ Line "" (LineStats 1 0 0) : more
-        else
-            return $ Line ss (LineStats 0 0 1) : more
-
+rxEmpty :: Regex
 rxEmpty = cpl "^\\s*$"
+
+-- Build a regexp that non-greedily matches a string up until a closing string.
+-- Useful for building regexes matching for closing comment tokens such as --> or */
+-- It works like this:
+-- Given a string, you can have any number of characters before it that is not the same
+-- as the first character. If you encounter the first character, something else should follow than the second.
+-- If you encounter a sequence that is the same as the first two, you cannot have the third one immediately follow them, etc.
+-- If you encounter the full closing string, than there you have it.
+--
+-- Example: "asd" => "^([^a]|a+[^as]|(a+s)+[^ad])*(a+s)+d" asasdasdasd => asasd
+--
+-- C++ closing comment: "*/"  => "^([^*]|\\*+[^*/])*\\*+/"
+--
+-- HTML closing comment: "-->" => "^([^-]|-[^-]|-+[^->])*--+>"
+
+-- (white space)
+-- ( a */ closing comment )
+-- ( some /* */ comments )
+-- ( maybe a // comment at the end of the line  )
+-- ( OR a /* comment start, that will continue on the next line)
+rxCStyle :: Regex
+rxCStyle = cpl "()"
 
 -- Number of every code lines in a file or set of files (project)
 csNumLines :: CodeStats -> Int
@@ -164,17 +166,6 @@ walk top = do
               then walk path
               else return [path]
     return (concat paths)
-
--- I know, I know.
-fromRight (Right x) = x
-
--- Compiles a regex
-cpl :: B.ByteString -> Regex
-cpl s = fromRight $ compile defaultCompOpt defaultExecOpt s
-
--- Dummy match `operator`
-mtch :: B.ByteString -> Regex -> Bool
-mtch s r = M.isJust $ matchOnce r s
 
 langsByExtensions :: [(B.ByteString, Language)]
 langsByExtensions =
@@ -278,8 +269,6 @@ fileStats :: FilePath -> Language -> IO CodeStats
 fileStats p lang = do
     ls <- B.lines <$> B.readFile p
 
-    let lang = fileLanguage $ B.pack p
-
     let langRX = langRXs lang
 
     let csLines = parseLines ls False (fst langRX) (snd langRX)
@@ -292,7 +281,7 @@ main :: IO ()
 main = do
     paths <- walk "."
 
-    let pathsLangs = filter (\(p,l) -> l /= Other) $ map (\p -> (p, fileLanguage (B.pack p))) paths
+    let pathsLangs = filter (\(_,l) -> l /= Other) $ map (\p -> (p, fileLanguage (B.pack p))) paths
 
     css <- forM pathsLangs $ \(p,l) -> fileStats p l
 
