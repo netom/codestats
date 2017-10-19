@@ -79,21 +79,19 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
--- I know, I know.
-fromRight :: Either a b -> b
-fromRight (Right x) = x
-fromRight (Left _) = error "FAIL."
-
--- Compiles a regex
--- Since it uses fromRight, EVERY regex must be tested so we can be sure they compile.
-cpl :: B.ByteString -> Regex
-cpl s = fromRight $ compile defaultCompOpt defaultExecOpt s
+-- Compiles a regex. Maybe.
+cpl :: B.ByteString -> Maybe Regex
+cpl s =
+    case compile defaultCompOpt defaultExecOpt s of
+    Right rx -> Just rx
+    Left  _  -> Nothing
 
 -- Dummy match `operator`
-mtch :: B.ByteString -> Regex -> Bool
-mtch s r = M.isJust $ matchOnce r s
+mtch :: B.ByteString -> Maybe Regex -> Bool
+mtch _ Nothing = False
+mtch s (Just r) = M.isJust $ matchOnce r s
 
-rxEmpty :: Regex
+rxEmpty :: Maybe Regex
 rxEmpty = cpl "^\\s*$"
 
 -- Build a regexp that non-greedily matches a string up until a closing string.
@@ -115,7 +113,7 @@ rxEmpty = cpl "^\\s*$"
 -- ( some /* */ comments )
 -- ( maybe a // comment at the end of the line  )
 -- ( OR a /* comment start, that will continue on the next line)
-rxCStyle :: Regex
+rxCStyle :: Maybe Regex
 rxCStyle = cpl "()"
 
 -- Number of every code lines in a file or set of files (project)
@@ -215,7 +213,7 @@ fileLanguage p =
     []        -> Other
 
 -- Comment parsing is buggy, yes. And butt ugly too.
-langRXs :: Language -> ([Regex], (Regex, Regex))
+langRXs :: Language -> ([Maybe Regex], (Maybe Regex, Maybe Regex))
 langRXs Ada = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
 langRXs C = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs Cabal = ([cpl "^\\s*--"], (cpl "a^", cpl "a^"))
@@ -244,7 +242,7 @@ langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs Text = ([], (cpl "a^", cpl "a^"))
 langRXs Other = ([], (cpl "a^", cpl "a^"))
 
-parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie (Int, Int)
+parseLines :: [B.ByteString] -> Bool -> [Maybe Regex] -> (Maybe Regex, Maybe Regex) -> T.Trie (Int, Int)
 parseLines [] _ _ _ = mempty
 parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
     if isPrevLineMlc
