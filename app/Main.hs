@@ -16,6 +16,7 @@ import Generics.Deriving.Monoid
 
 import Text.Regex.TDFA hiding (match)
 import Text.Regex.TDFA.ByteString
+import Text.Regex.Applicative
 
 import Control.Monad
 
@@ -165,52 +166,60 @@ walk top = do
               else return [path]
     return (concat paths)
 
-langsByExtensions :: [(B.ByteString, Language)]
-langsByExtensions =
-    [ (".ada", Ada)
-    , (".c", C)
-    , (".cabal", Cabal)
-    , (".cs", CSharp)
-    , (".cpp", Cplusplus)
-    , (".coffee", CoffeeScript)
-    , (".css", CSS)
-    , (".go", Go)
-    , (".hs", Haskell)
-    , (".html", HTML)
-    , (".java", Java)
-    , (".js", JavaScript)
-    , (".json", JSON)
+-- Not used, but might be useful ;)
+isPostfix :: String -> String -> Bool
+isPostfix rs s =
+    case findLongestPrefix (few anySym *> string rs *> pure ()) s of
+    Just ((),"") -> True
+    _            -> False
 
-    , (".el", Lisp)
-    , (".lisp", Lisp)
-    , (".cl", Lisp)
+pathLangRx :: RE Char Language
+pathLangRx = few anySym *>
+    (   ".ada"    *> pure Ada
+    <|> ".c"      *> pure C
+    <|> ".cabal"  *> pure Cabal
+    <|> ".cs"     *> pure CSharp
+    <|> ".cpp"    *> pure Cplusplus
+    <|> ".coffee" *> pure CoffeeScript
+    <|> ".css"    *> pure CSS
+    <|> ".go"     *> pure Go
+    <|> ".hs"     *> pure Haskell
+    <|> ".html"   *> pure HTML
+    <|> ".java"   *> pure Java
+    <|> ".js"     *> pure JavaScript
+    <|> ".json"   *> pure JSON
 
-    , (".pl", Perl)
-    , (".pm", Perl)
+    <|> ".el"     *> pure Lisp
+    <|> ".lisp"   *> pure Lisp
+    <|> ".cl"     *> pure Lisp
 
-    , (".php", PHP)
-    , (".phtml", PHP)
+    <|> ".pl"     *> pure Perl
+    <|> ".pm"     *> pure Perl
 
-    , (".py", Python)
-    , (".rb", Ruby)
-    , (".sh", Shell)
-    , (".sql", SQL)
-    , (".xml", XML)
+    <|> ".php"    *> pure PHP
+    <|> ".inc"    *> pure PHP
+    <|> ".phtml"  *> pure PHP
 
-    , (".yaml", Yaml)
-    , (".yml", Yaml)
+    <|> ".py"     *> pure Python
+    <|> ".rb"     *> pure Ruby
+    <|> ".sh"     *> pure Shell
+    <|> ".sql"    *> pure SQL
+    <|> ".xml"    *> pure XML
 
-    , (".zsh", Zsh)
+    <|> ".yaml"   *> pure Yaml
+    <|> ".yml"    *> pure Yaml
 
-    , (".txt", Text)
-    , (".md", Text)
-    ]
+    <|> ".zsh"    *> pure Zsh
 
-fileLanguage :: B.ByteString -> Language
-fileLanguage p =
-    case dropWhile (\(ext, _) -> not $ B.isSuffixOf ext p) langsByExtensions of
-    ((_,l):_) -> l
-    []        -> Other
+    <|> ".txt"    *> pure Text
+    <|> ".md"     *> pure Text
+    )
+
+pathLanguage :: String -> Language
+pathLanguage p =
+    case findLongestPrefix pathLangRx p of
+    Just (l,"") -> l
+    _           -> Other
 
 -- Comment parsing is buggy, yes. And butt ugly too.
 langRXs :: Language -> ([Maybe Regex], (Maybe Regex, Maybe Regex))
@@ -279,7 +288,7 @@ main :: IO ()
 main = do
     paths <- walk "."
 
-    let pathsLangs = filter (\(_,l) -> l /= Other) $ map (\p -> (p, fileLanguage (B.pack p))) paths
+    let pathsLangs = filter (\(_,l) -> l /= Other) $ map (\p -> (p, pathLanguage p)) paths
 
     css <- forM pathsLangs $ \(p,l) -> fileStats p l
 
