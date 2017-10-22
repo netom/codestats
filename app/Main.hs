@@ -10,12 +10,12 @@ import qualified Data.Set as S
 import qualified Data.List as L
 import qualified Data.Maybe as M
 import qualified Data.ByteString.Char8 as B
+import Data.Word8
+import Data.Char
 
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
 
-import Text.Regex.TDFA hiding (match)
-import Text.Regex.TDFA.ByteString
 import Text.Regex.Applicative
 
 import Control.Monad
@@ -80,21 +80,6 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
--- Compiles a regex. Maybe.
-cpl :: B.ByteString -> Maybe Regex
-cpl s =
-    case compile defaultCompOpt defaultExecOpt s of
-    Right rx -> Just rx
-    Left  _  -> Nothing
-
--- Dummy match `operator`
-mtch :: B.ByteString -> Maybe Regex -> Bool
-mtch _ Nothing = False
-mtch s (Just r) = M.isJust $ matchOnce r s
-
-rxEmpty :: Maybe Regex
-rxEmpty = cpl "^\\s*$"
-
 -- Build a regexp that non-greedily matches a string up until a closing string.
 -- Useful for building regexes matching for closing comment tokens such as --> or */
 -- It works like this:
@@ -114,8 +99,28 @@ rxEmpty = cpl "^\\s*$"
 -- ( some /* */ comments )
 -- ( maybe a // comment at the end of the line  )
 -- ( OR a /* comment start, that will continue on the next line)
-rxCStyle :: Maybe Regex
-rxCStyle = cpl "()"
+-- rxCStyle :: Maybe Regex
+-- rxCStyle = cpl "()"
+
+-- Boolean regex match operator
+(==~) :: [s] -> RE s a -> Bool
+(==~) = curry $ M.isJust .  uncurry (=~)
+
+-- Boolean regex match operator over ByteStrings
+(===~) :: B.ByteString -> RE Word8 a -> Bool
+(===~) s r = B.unpack s ==~ comap (fromIntegral . ord) r
+
+w82ch :: Word8 -> Char
+w82ch = chr . fromIntegral
+
+ch2w8 :: Char -> Word8
+ch2w8 = fromIntegral . ord
+
+bsym :: Char -> RE Word8 Word8
+bsym = sym . fromIntegral . ord
+
+bstring :: B.ByteString -> RE Word8 [Word8]
+bstring s = comap w82ch $ map ch2w8 <$> (string $ B.unpack s)
 
 -- Number of every code lines in a file or set of files (project)
 csNumLines :: CodeStats -> Int
@@ -124,10 +129,13 @@ csNumLines cs = sum $ map (\(e, c) -> e + c) $ T.elems $ csLines cs
 -- Number of lines containint only comments and maybe whitespace
 csNumComments :: CodeStats -> Int
 csNumComments cs = sum $ map (\(_, c) -> c) $ T.elems $ csLines cs
- 
+
+ws :: RE Word8 [Word8]
+ws = few (bsym ' ' <|> bsym '\t')
+
 -- Number of non-comment lines containing only whitespace
 csNumEmptyNonComment :: CodeStats -> Int
-csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k `mtch` rxEmpty then Just v else Nothing) $ csLines cs
+csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k ===~ ws then Just v else Nothing) $ csLines cs
 
 -- Number of effective line: those that are non-comment and non-whitespace
 csNumEffectiveLines :: CodeStats -> Int
@@ -148,7 +156,7 @@ csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
 csNetLines :: CodeStats -> Int
-csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k `mtch` rxEmpty) then Just (e, c) else Nothing) $ csLines cs
+csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k ===~ ws) then Just (e, c) else Nothing) $ csLines cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
 csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
@@ -221,52 +229,64 @@ pathLanguage p =
     Just (l,"") -> l
     _           -> Other
 
+type REW8 = RE Word8 [Word8]
+-- few (" " <|>  "\t") *> "--"
+
 -- Comment parsing is buggy, yes. And butt ugly too.
-langRXs :: Language -> ([Maybe Regex], (Maybe Regex, Maybe Regex))
-langRXs Ada = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
-langRXs C = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs Cabal = ([cpl "^\\s*--"], (cpl "a^", cpl "a^"))
-langRXs CSharp = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs Cplusplus = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs CoffeeScript = ([cpl "^[ \\t]#"], (cpl "^[ \\t]*###", cpl "^[ \\t]*###"))
-langRXs CSS = ([cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs Go = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs Haskell = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
-langRXs HTML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
-langRXs Java = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs JavaScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs JSON = ([cpl "a^"], (cpl "a^", cpl "a^"))
-langRXs Lisp = ([cpl "^[ \\t]*;", cpl "^[ \\t]*;;", cpl "^[ \\t]*;;;", cpl "^[ \\t]*;;;;"], (cpl "a^", cpl "a^"))
-langRXs Perl = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+langRXs :: Language -> ([REW8], (REW8, REW8))
+langRXs l =
+    case l of
+    C     -> cstyle
+    PHP   -> cstyle
+    Other -> nope
+    _     -> nope
+    where
+        nope   = ([empty], (empty, empty))
+        as     = few anySym
+        cstyle = ([ws *> bstring "//", ws *> bstring "/*" *> as *> bstring "*/"], (few anySym *> bstring "/*" *> few anySym, few anySym *> bstring "*/" *> few anySym))
 
-langRXs PHP = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs Ada = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+-- ~ langRXs C = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs Cabal = ([cpl "^\\s*--"], (cpl "a^", cpl "a^"))
+-- ~ langRXs CSharp = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs Cplusplus = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs CoffeeScript = ([cpl "^[ \\t]#"], (cpl "^[ \\t]*###", cpl "^[ \\t]*###"))
+-- ~ langRXs CSS = ([cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs Go = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs Haskell = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+-- ~ langRXs HTML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
+-- ~ langRXs Java = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs JavaScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs JSON = ([cpl "a^"], (cpl "a^", cpl "a^"))
+-- ~ langRXs Lisp = ([cpl "^[ \\t]*;", cpl "^[ \\t]*;;", cpl "^[ \\t]*;;;", cpl "^[ \\t]*;;;;"], (cpl "a^", cpl "a^"))
+-- ~ langRXs Perl = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+-- ~ langRXs PHP = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+-- ~ langRXs Python = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+-- ~ langRXs Ruby = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+-- ~ langRXs Shell = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+-- ~ langRXs SQL = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+-- ~ langRXs XML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
+-- ~ langRXs Yaml = ([cpl "a^"], (cpl "a^", cpl "a^"))
+-- ~ langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
+-- ~ langRXs Text = ([], (cpl "a^", cpl "a^"))
+-- ~ langRXs Other = ([], (cpl "a^", cpl "a^"))
 
-langRXs Python = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
-langRXs Ruby = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
-langRXs Shell = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
-langRXs SQL = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
-langRXs XML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
-langRXs Yaml = ([cpl "a^"], (cpl "a^", cpl "a^"))
-langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
-langRXs Text = ([], (cpl "a^", cpl "a^"))
-langRXs Other = ([], (cpl "a^", cpl "a^"))
-
-parseLines :: [B.ByteString] -> Bool -> [Maybe Regex] -> (Maybe Regex, Maybe Regex) -> T.Trie (Int, Int)
+parseLines :: [B.ByteString] -> Bool -> [REW8] -> (REW8, REW8) -> T.Trie (Int, Int)
 parseLines [] _ _ _ = mempty
 parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
     if isPrevLineMlc
     then
-        if l `mtch` mlcEnd
+        if l ===~ mlcEnd
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
             T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc
     else
-        if any (mtch l) slcs
+        if any (l ===~) slcs
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
-            if l `mtch` mlcStart
+            if l ===~ mlcStart
             then
                 T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc -- TODO: this CAN be a code line
             else
