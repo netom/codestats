@@ -28,8 +28,7 @@ executable codestats
                      , generic-deriving
                      , bytestring-trie
                      , bytestring
-                     , regex-base
-                     , regex-tdfa
+                     , pcre-light
                      , filepath
                      , directory
                      , unix

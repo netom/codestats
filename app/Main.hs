@@ -14,8 +14,7 @@ import qualified Data.ByteString.Char8 as B
 import Generics.Deriving.Base (Generic)
 import Generics.Deriving.Monoid
 
-import Text.Regex.TDFA hiding (match)
-import Text.Regex.TDFA.ByteString
+import Text.Regex.PCRE.Light
 
 import Control.Monad
 
@@ -79,19 +78,14 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
--- Compiles a regex. Maybe.
-cpl :: B.ByteString -> Maybe Regex
-cpl s =
-    case compile defaultCompOpt defaultExecOpt s of
-    Right rx -> Just rx
-    Left  _  -> Nothing
+-- Our match operator
+(=~) :: B.ByteString -> Regex -> Bool
+(=~) s r = M.isJust $ match r s []
 
--- Dummy match `operator`
-mtch :: B.ByteString -> Maybe Regex -> Bool
-mtch _ Nothing = False
-mtch s (Just r) = M.isJust $ matchOnce r s
+cpl :: B.ByteString -> Regex
+cpl s = compile s []
 
-rxEmpty :: Maybe Regex
+rxEmpty :: Regex
 rxEmpty = cpl "^\\s*$"
 
 -- Build a regexp that non-greedily matches a string up until a closing string.
@@ -113,7 +107,7 @@ rxEmpty = cpl "^\\s*$"
 -- ( some /* */ comments )
 -- ( maybe a // comment at the end of the line  )
 -- ( OR a /* comment start, that will continue on the next line)
-rxCStyle :: Maybe Regex
+rxCStyle :: Regex
 rxCStyle = cpl "()"
 
 -- Number of every code lines in a file or set of files (project)
@@ -126,7 +120,7 @@ csNumComments cs = sum $ map (\(_, c) -> c) $ T.elems $ csLines cs
  
 -- Number of non-comment lines containing only whitespace
 csNumEmptyNonComment :: CodeStats -> Int
-csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k `mtch` rxEmpty then Just v else Nothing) $ csLines cs
+csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k =~ rxEmpty then Just v else Nothing) $ csLines cs
 
 -- Number of effective line: those that are non-comment and non-whitespace
 csNumEffectiveLines :: CodeStats -> Int
@@ -147,7 +141,7 @@ csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
 csNetLines :: CodeStats -> Int
-csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k `mtch` rxEmpty) then Just (e, c) else Nothing) $ csLines cs
+csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k =~ rxEmpty) then Just (e, c) else Nothing) $ csLines cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
 csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
@@ -213,7 +207,7 @@ fileLanguage p =
     []        -> Other
 
 -- Comment parsing is buggy, yes. And butt ugly too.
-langRXs :: Language -> ([Maybe Regex], (Maybe Regex, Maybe Regex))
+langRXs :: Language -> ([Regex], (Regex, Regex))
 langRXs Ada = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
 langRXs C = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs Cabal = ([cpl "^\\s*--"], (cpl "a^", cpl "a^"))
@@ -242,22 +236,22 @@ langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs Text = ([], (cpl "a^", cpl "a^"))
 langRXs Other = ([], (cpl "a^", cpl "a^"))
 
-parseLines :: [B.ByteString] -> Bool -> [Maybe Regex] -> (Maybe Regex, Maybe Regex) -> T.Trie (Int, Int)
+parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie (Int, Int)
 parseLines [] _ _ _ = mempty
 parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
     if isPrevLineMlc
     then
-        if l `mtch` mlcEnd
+        if l =~ mlcEnd
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
             T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc
     else
-        if any (mtch l) slcs
+        if any ((=~) l) slcs
         then
             T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
         else
-            if l `mtch` mlcStart
+            if l =~ mlcStart
             then
                 T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc -- TODO: this CAN be a code line
             else
