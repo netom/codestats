@@ -22,7 +22,7 @@ library
 executable codestats
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -Wall -fno-warn-orphans -threaded -rtsopts -with-rtsopts=-N
+  ghc-options:         -O2 -Wall -fno-warn-orphans -threaded -rtsopts -with-rtsopts=-N
   build-depends:       base
                      , codestats
                      , generic-deriving

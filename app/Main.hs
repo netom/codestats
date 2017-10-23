@@ -59,10 +59,10 @@ instance Monoid Int where
 -- Report unkown files
 
 data LineStats = LineStats
-    { lsEmpty   :: Int
+    { lsCode    :: Int
     , lsComment :: Int
-    , lsCode    :: Int
-    } deriving (Show)
+    , lsEmpty   :: Int
+    } deriving (Show, Generic)
 
 data Line = Line
     { lContent :: B.ByteString
@@ -70,9 +70,13 @@ data Line = Line
     } deriving (Show)
 
 data CodeStats = CodeStats
-    { csLines       :: T.Trie (Int, Int) -- Lines, and how many times they occur as fst: effective lines snd: comments
-    , csLanguages   :: S.Set Language    -- Set of the names of the recognized programming languages used
+    { csT     :: T.Trie LineStats -- Lines, and how many times they occur as fst: program lines snd: comments
+    , csLangs :: S.Set Language    -- Set of the names of the recognized programming languages used
     } deriving (Show, Generic)
+
+instance Monoid LineStats where
+    mempty  = memptydefault
+    mappend = mappenddefault
 
 instance Monoid CodeStats where
     mempty  = memptydefault
@@ -111,41 +115,69 @@ rxCStyle :: Regex
 rxCStyle = cpl "()"
 
 -- Number of every code lines in a file or set of files (project)
-csNumLines :: CodeStats -> Int
-csNumLines cs = sum $ map (\(e, c) -> e + c) $ T.elems $ csLines cs
+csLines :: CodeStats -> Int
+csLines cs = sum $ map (\LineStats{..} -> lsCode + lsComment + lsEmpty) $ T.elems $ csT cs
 
--- Number of lines containint only comments and maybe whitespace
-csNumComments :: CodeStats -> Int
-csNumComments cs = sum $ map (\(_, c) -> c) $ T.elems $ csLines cs
+-- Number of lines with some comments
+csCodeLines :: CodeStats -> Int
+csCodeLines cs = sum $ map (\LineStats{..} -> lsCode) $ T.elems $ csT cs
+
+-- Number of lines with some comments
+csCommentLines :: CodeStats -> Int
+csCommentLines cs = sum $ map (\LineStats{..} -> lsComment) $ T.elems $ csT cs
  
--- Number of non-comment lines containing only whitespace
-csNumEmptyNonComment :: CodeStats -> Int
-csNumEmptyNonComment cs = sum $ map (\(e, _) -> e) $ T.elems $ T.mapBy (\k v -> if k =~ rxEmpty then Just v else Nothing) $ csLines cs
+-- Number of lines with some comments
+csEmptyLines :: CodeStats -> Int
+csEmptyLines cs = sum $ map (\LineStats{..} -> lsEmpty) $ T.elems $ csT cs
+
+csNonEmptyCodeLines :: CodeStats -> Int
+csNonEmptyCodeLines cs = sum $ map (\LineStats{..} -> if lsEmpty > 0 then 0 else lsCode) $ T.elems $ csT cs
+
+csNonEmptyCommentLines :: CodeStats -> Int
+csNonEmptyCommentLines cs = sum $ map (\LineStats{..} -> if lsEmpty > 0 then 0 else lsComment) $ T.elems $ csT cs
+
+csRepeatedCodeLines :: CodeStats -> Int
+csRepeatedCodeLines = undefined
+
+csCodeLineRepetitions :: CodeStats -> Int
+csCodeLineRepetitions = undefined
+
+csRepeatedCommentLines :: CodeStats -> Int
+csRepeatedCommentLines = undefined
+
+csCommentLineRepetitions :: CodeStats -> Int
+csCommentLineRepetitions = undefined
+
+csDistinctNonEmptyCodeLines :: CodeStats -> Int
+csDistinctNonEmptyCodeLines = undefined
+
+csDistinctNonEmptyCommentLines :: CodeStats -> Int
+csDistinctNonEmptyCommentLines = undefined
 
 -- Number of effective line: those that are non-comment and non-whitespace
-csNumEffectiveLines :: CodeStats -> Int
-csNumEffectiveLines cs = csNumLines cs - csNumComments cs - csNumEmptyNonComment cs
+--csEffectiveLines :: CodeStats -> Int
+--csEffectiveLines cs = csLines cs - csComments cs - csEmptyNonComment cs
 
 -- Lines that are appearing more than once as a non-comment line
 -- This function disregards programming language
-csRepeated :: CodeStats -> T.Trie (Int, Int)
-csRepeated cs = T.filterMap (\(e, c) -> if e > 1 then Just (e, c) else Nothing) $ csLines cs
+--csRepeated :: CodeStats -> T.Trie LineStats
+--csRepeated cs = T.filterMap (\ls@LineStats{..} -> if lsCode > 1 then Just ls else Nothing) $ csT cs
 
 -- Number of distinct, repeated, non-comment lines
-csNumRepeated :: CodeStats -> Int
-csNumRepeated cs = T.size $ csRepeated cs
+--csRepeated :: CodeStats -> Int
+--csRepeated cs = T.size $ csRepeated cs
 
 -- Number of repeatitions with multiplicity (non-comment lines)
-csNumRepetitions :: CodeStats -> Int
-csNumRepetitions cs = sum $ map fst $ T.elems $ csRepeated cs
+--csRepetitions :: CodeStats -> Int
+--csRepetitions cs = sum $ map (\LineStats{..} -> lsCode) $ T.elems $ csRepeated cs
 
 -- Number of unique non-comment, non-whitespace lines
-csNetLines :: CodeStats -> Int
-csNetLines cs = T.size $ T.mapBy (\k (e, c) -> if e > 0 && (not $ k =~ rxEmpty) then Just (e, c) else Nothing) $ csLines cs
+--csNetLines :: CodeStats -> Int
+--csNetLines cs = T.size $ T.mapBy (\k ls@LineStats{..} -> if lsCode > 0 && (not $ k =~ rxEmpty) then Just ls else Nothing) $ csT cs
 
 -- Number of lines without copied lines (e.g. License), tests or generated code lines
-csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
-csNetLines2 wholeProject copied tests generated = csNetLines wholeProject - csNetLines copied - csNetLines tests - csNetLines generated
+--csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
+--csNetLines2 wholeProject copied tests generated = csNetLines wholeProject - csNetLines copied - csNetLines tests - csNetLines generated
 
 -- Traverse from 'top' directory and return all the relevant files
 walk :: FilePath -> IO [FilePath]
@@ -236,26 +268,26 @@ langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs Text = ([], (cpl "a^", cpl "a^"))
 langRXs Other = ([], (cpl "a^", cpl "a^"))
 
-parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie (Int, Int)
+parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie LineStats
 parseLines [] _ _ _ = mempty
 parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
     if isPrevLineMlc
     then
         if l =~ mlcEnd
         then
-            T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
+            T.singleton l (LineStats 0 1 0) `mappend` parseLines ls False slcs mlc
         else
-            T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc
+            T.singleton l (LineStats 0 1 0) `mappend` parseLines ls True slcs mlc
     else
         if any ((=~) l) slcs
         then
-            T.singleton l (0, 1) `mappend` parseLines ls False slcs mlc
+            T.singleton l (LineStats 0 1 0) `mappend` parseLines ls False slcs mlc
         else
             if l =~ mlcStart
             then
-                T.singleton l (0, 1) `mappend` parseLines ls True slcs mlc -- TODO: this CAN be a code line
+                T.singleton l (LineStats 0 1 0) `mappend` parseLines ls True slcs mlc
             else
-                T.singleton l (1, 0) `mappend` parseLines ls False slcs mlc
+                T.singleton l (LineStats 1 0 0) `mappend` parseLines ls False slcs mlc
 
 fileStats :: FilePath -> Language -> IO CodeStats
 fileStats p lang = do
@@ -263,9 +295,9 @@ fileStats p lang = do
 
     let langRX = langRXs lang
 
-    let csLines = parseLines ls False (fst langRX) (snd langRX)
+    let csT = parseLines ls False (fst langRX) (snd langRX)
 
-    let csLanguages = S.fromList [lang]
+    let csLangs = S.fromList [lang]
 
     return CodeStats{..}
 
@@ -279,11 +311,21 @@ main = do
 
     let stats = mconcat css
 
-    putStrLn $ "All lines:       " ++ show (csNumLines stats)
-    putStrLn $ "Comments:        " ++ show (csNumComments stats)
-    putStrLn $ "Empty lines:     " ++ show (csNumEmptyNonComment stats)
-    putStrLn $ "Effective lines: " ++ show (csNumEffectiveLines stats)
-    putStrLn $ "Repeating lines: " ++ show (csNumRepeated stats)
-    putStrLn $ "Repetitions:     " ++ show (csNumRepetitions stats)
-    putStrLn $ "Net lines:       " ++ show (csNetLines stats)
-    putStrLn $ "Languages: " ++ L.intercalate ", " (map show (S.toList (csLanguages stats)))
+    putStrLn $ "All lines:       " ++ show (csLines stats)
+    putStrLn $ "Code lines:      " ++ show (csCodeLines stats)
+    putStrLn $ "Comment lines:   " ++ show (csCommentLines stats)
+    putStrLn $ "Empty lines:     " ++ show (csEmptyLines stats)
+    putStrLn $ ""
+    putStrLn $ "Non-empty comment lines: " ++ show (csNonEmptyCodeLines stats)
+    putStrLn $ "Non-empty code lines:    " ++ show (csNonEmptyCommentLines stats)
+    putStrLn $ ""
+    putStrLn $ "Repeating code lines: " ++ show (csRepeatedCodeLines stats)
+    putStrLn $ "Repetitions:          " ++ show (csCodeLineRepetitions stats)
+    putStrLn $ ""
+    putStrLn $ "Repeating comment lines: " ++ show (csRepeatedCommentLines stats)
+    putStrLn $ "Repetitions:             " ++ show (csCommentLineRepetitions stats)
+    putStrLn $ ""
+    putStrLn $ "Distinct non-empty code lines:    " ++ show (csDistinctNonEmptyCodeLines stats)
+    putStrLn $ "Distinct non-empty comment lines: " ++ show (csDistinctNonEmptyCommentLines stats)
+    putStrLn $ ""
+    putStrLn $ "Languages: " ++ L.intercalate ", " (map show (S.toList (csLangs stats)))
