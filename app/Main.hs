@@ -106,14 +106,6 @@ rxEmpty = cpl "^\\s*$"
 --
 -- HTML closing comment: "-->" => "^([^-]|-[^-]|-+[^->])*--+>"
 
--- (white space)
--- ( a */ closing comment )
--- ( some /* */ comments )
--- ( maybe a // comment at the end of the line  )
--- ( OR a /* comment start, that will continue on the next line)
-rxCStyle :: Regex
-rxCStyle = cpl "()"
-
 -- Number of every code lines in a file or set of files (project)
 csLines :: CodeStats -> Int
 csLines cs = sum $ map (\LineStats{..} -> lsCode + lsComment + lsEmpty) $ T.elems $ csT cs
@@ -137,47 +129,22 @@ csNonEmptyCommentLines :: CodeStats -> Int
 csNonEmptyCommentLines cs = sum $ map (\LineStats{..} -> if lsEmpty > 0 then 0 else lsComment) $ T.elems $ csT cs
 
 csRepeatedCodeLines :: CodeStats -> Int
-csRepeatedCodeLines = undefined
+csRepeatedCodeLines cs = sum $ map (\LineStats{..} -> if lsCode > 1 then 1 else 0) $ T.elems $ csT cs
 
 csCodeLineRepetitions :: CodeStats -> Int
-csCodeLineRepetitions = undefined
+csCodeLineRepetitions cs = sum $ map (\LineStats{..} -> if lsCode > 1 then lsCode else 0) $ T.elems $ csT cs
 
 csRepeatedCommentLines :: CodeStats -> Int
-csRepeatedCommentLines = undefined
+csRepeatedCommentLines cs = sum $ map (\LineStats{..} -> if lsComment > 1 then 1 else 0) $ T.elems $ csT cs
 
 csCommentLineRepetitions :: CodeStats -> Int
-csCommentLineRepetitions = undefined
+csCommentLineRepetitions cs = sum $ map (\LineStats{..} -> if lsComment > 1 then lsComment else 0) $ T.elems $ csT cs
 
 csDistinctNonEmptyCodeLines :: CodeStats -> Int
-csDistinctNonEmptyCodeLines = undefined
+csDistinctNonEmptyCodeLines cs = sum $ map (\LineStats{..} -> if lsCode > 0 && lsEmpty == 0 then 1 else 0) $ T.elems $ csT cs
 
 csDistinctNonEmptyCommentLines :: CodeStats -> Int
-csDistinctNonEmptyCommentLines = undefined
-
--- Number of effective line: those that are non-comment and non-whitespace
---csEffectiveLines :: CodeStats -> Int
---csEffectiveLines cs = csLines cs - csComments cs - csEmptyNonComment cs
-
--- Lines that are appearing more than once as a non-comment line
--- This function disregards programming language
---csRepeated :: CodeStats -> T.Trie LineStats
---csRepeated cs = T.filterMap (\ls@LineStats{..} -> if lsCode > 1 then Just ls else Nothing) $ csT cs
-
--- Number of distinct, repeated, non-comment lines
---csRepeated :: CodeStats -> Int
---csRepeated cs = T.size $ csRepeated cs
-
--- Number of repeatitions with multiplicity (non-comment lines)
---csRepetitions :: CodeStats -> Int
---csRepetitions cs = sum $ map (\LineStats{..} -> lsCode) $ T.elems $ csRepeated cs
-
--- Number of unique non-comment, non-whitespace lines
---csNetLines :: CodeStats -> Int
---csNetLines cs = T.size $ T.mapBy (\k ls@LineStats{..} -> if lsCode > 0 && (not $ k =~ rxEmpty) then Just ls else Nothing) $ csT cs
-
--- Number of lines without copied lines (e.g. License), tests or generated code lines
---csNetLines2 :: CodeStats -> CodeStats -> CodeStats -> CodeStats -> Int
---csNetLines2 wholeProject copied tests generated = csNetLines wholeProject - csNetLines copied - csNetLines tests - csNetLines generated
+csDistinctNonEmptyCommentLines cs = sum $ map (\LineStats{..} -> if lsComment > 0 && lsEmpty == 0 then 1 else 0) $ T.elems $ csT cs
 
 -- Traverse from 'top' directory and return all the relevant files
 walk :: FilePath -> IO [FilePath]
