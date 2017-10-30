@@ -237,24 +237,17 @@ langRXs Other = ([], (cpl "a^", cpl "a^"))
 
 parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie LineStats
 parseLines [] _ _ _ = mempty
-parseLines (l:ls) isPrevLineMlc slcs mlc@(mlcStart, mlcEnd) =
-    if isPrevLineMlc
-    then
-        if l =~ mlcEnd
-        then
-            T.singleton l (LineStats 0 1 0) `mappend` parseLines ls False slcs mlc
-        else
-            T.singleton l (LineStats 0 1 0) `mappend` parseLines ls True slcs mlc
-    else
-        if any ((=~) l) slcs
-        then
-            T.singleton l (LineStats 0 1 0) `mappend` parseLines ls False slcs mlc
-        else
-            if l =~ mlcStart
-            then
-                T.singleton l (LineStats 0 1 0) `mappend` parseLines ls True slcs mlc
-            else
-                T.singleton l (LineStats 1 0 0) `mappend` parseLines ls False slcs mlc
+parseLines (l:ls) isMlcContinues slcs mlc@(mlcStart, mlcEnd) =
+    mappend
+        ( T.singleton l (LineStats (fromEnum isCode) (fromEnum isComment) (fromEnum isEmpty)) )
+        ( parseLines ls mlcContinues slcs mlc )
+    where
+        isMlcStart = l =~ mlcStart
+        isMlcEnd = l =~ mlcEnd
+        isEmpty = l =~ rxEmpty
+        isComment = isMlcContinues || (any ((=~) l) slcs)
+        isCode = not isComment
+        mlcContinues = isMlcStart || (isMlcContinues && not isMlcEnd)
 
 fileStats :: FilePath -> Language -> IO CodeStats
 fileStats p lang = do
