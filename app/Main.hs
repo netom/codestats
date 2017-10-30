@@ -3,12 +3,11 @@ module Main where
 
 import Prelude hiding (lines, readFile)
 
---import Lib
+import Lib
 
 import qualified Data.Trie as T
 import qualified Data.Set as S
 import qualified Data.List as L
-import qualified Data.Maybe as M
 import qualified Data.ByteString.Char8 as B
 
 import Generics.Deriving.Base (Generic)
@@ -82,16 +81,6 @@ instance Monoid CodeStats where
     mempty  = memptydefault
     mappend = mappenddefault
 
--- Our match operator
-(=~) :: B.ByteString -> Regex -> Bool
-(=~) s r = M.isJust $ match r s []
-
-cpl :: B.ByteString -> Regex
-cpl s = compile s []
-
-rxEmpty :: Regex
-rxEmpty = cpl "^\\s*$"
-
 -- Build a regexp that non-greedily matches a string up until a closing string.
 -- Useful for building regexes matching for closing comment tokens such as --> or */
 -- It works like this:
@@ -108,7 +97,7 @@ rxEmpty = cpl "^\\s*$"
 
 -- Number of every code lines in a file or set of files (project)
 csLines :: CodeStats -> Int
-csLines cs = sum $ map (\LineStats{..} -> lsCode + lsComment + lsEmpty) $ T.elems $ csT cs
+csLines cs = sum $ map (\LineStats{..} -> lsCode + lsComment) $ T.elems $ csT cs
 
 -- Number of lines with some comments
 csCodeLines :: CodeStats -> Int
@@ -244,7 +233,7 @@ parseLines (l:ls) isMlcContinues slcs mlc@(mlcStart, mlcEnd) =
     where
         isMlcStart = l =~ mlcStart
         isMlcEnd = l =~ mlcEnd
-        isEmpty = l =~ rxEmpty
+        isEmpty = l == "" || l =~ rxEmpty -- The PCRE.Light library won't match empty strings on certain occasions (nullptr strings)
         isComment = isMlcContinues || (any ((=~) l) slcs)
         isCode = not isComment
         mlcContinues = isMlcStart || (isMlcContinues && not isMlcEnd)
