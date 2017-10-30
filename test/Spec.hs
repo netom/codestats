@@ -3,11 +3,12 @@
 import Lib
 
 --import Text.Regex.PCRE.Light
---import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Char8 as B
 
 main :: IO ()
 main = do
     putStrLn "Testing empty regex:"
+    putStrLn $ show $ B.empty =~ rxEmpty
     putStrLn $ show $ "" =~ rxEmpty
     putStrLn $ show $ " " =~ rxEmpty
     putStrLn $ show $ "   " =~ rxEmpty

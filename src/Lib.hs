@@ -16,4 +16,4 @@ cpl :: B.ByteString -> Regex
 cpl s = compile s []
 
 rxEmpty :: Regex
-rxEmpty = cpl "^$"
+rxEmpty = cpl "^\\s*$"

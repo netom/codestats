@@ -265,8 +265,8 @@ main = do
     putStrLn $ "Comment lines:   " ++ show (csCommentLines stats)
     putStrLn $ "Empty lines:     " ++ show (csEmptyLines stats)
     putStrLn $ ""
-    putStrLn $ "Non-empty comment lines: " ++ show (csNonEmptyCodeLines stats)
-    putStrLn $ "Non-empty code lines:    " ++ show (csNonEmptyCommentLines stats)
+    putStrLn $ "Non-empty comment lines: " ++ show (csNonEmptyCommentLines stats)
+    putStrLn $ "Non-empty code lines:    " ++ show (csNonEmptyCodeLines stats)
     putStrLn $ ""
     putStrLn $ "Repeating code lines: " ++ show (csRepeatedCodeLines stats)
     putStrLn $ "Repetitions:          " ++ show (csCodeLineRepetitions stats)
