@@ -49,18 +49,16 @@ data Language
     | Other
     deriving (Eq, Ord, Show)
 
-instance Monoid Int where
-    mempty  = 0
-    mappend = (+)
+type SI = Sum Int
 
 -- Number of files
 -- Stats per file, per language
 -- Report unkown files
 
 data LineStats = LineStats
-    { lsCode    :: Int
-    , lsComment :: Int
-    , lsEmpty   :: Int
+    { lsCode    :: SI
+    , lsComment :: SI
+    , lsEmpty   :: SI
     } deriving (Show, Generic)
 
 data Line = Line
@@ -96,43 +94,43 @@ instance Monoid CodeStats where
 -- HTML closing comment: "-->" => "^([^-]|-[^-]|-+[^->])*--+>"
 
 -- Number of every code lines in a file or set of files (project)
-csLines :: CodeStats -> Int
+csLines :: CodeStats -> SI
 csLines cs = sum $ map (\LineStats{..} -> lsCode + lsComment) $ T.elems $ csT cs
 
 -- Number of lines with some comments
-csCodeLines :: CodeStats -> Int
+csCodeLines :: CodeStats -> SI
 csCodeLines cs = sum $ map (\LineStats{..} -> lsCode) $ T.elems $ csT cs
 
 -- Number of lines with some comments
-csCommentLines :: CodeStats -> Int
+csCommentLines :: CodeStats -> SI
 csCommentLines cs = sum $ map (\LineStats{..} -> lsComment) $ T.elems $ csT cs
  
 -- Number of lines with some comments
-csEmptyLines :: CodeStats -> Int
+csEmptyLines :: CodeStats -> SI
 csEmptyLines cs = sum $ map (\LineStats{..} -> lsEmpty) $ T.elems $ csT cs
 
-csNonEmptyCodeLines :: CodeStats -> Int
+csNonEmptyCodeLines :: CodeStats -> SI
 csNonEmptyCodeLines cs = sum $ map (\LineStats{..} -> if lsEmpty > 0 then 0 else lsCode) $ T.elems $ csT cs
 
-csNonEmptyCommentLines :: CodeStats -> Int
+csNonEmptyCommentLines :: CodeStats -> SI
 csNonEmptyCommentLines cs = sum $ map (\LineStats{..} -> if lsEmpty > 0 then 0 else lsComment) $ T.elems $ csT cs
 
-csRepeatedCodeLines :: CodeStats -> Int
+csRepeatedCodeLines :: CodeStats -> SI
 csRepeatedCodeLines cs = sum $ map (\LineStats{..} -> if lsCode > 1 then 1 else 0) $ T.elems $ csT cs
 
-csCodeLineRepetitions :: CodeStats -> Int
+csCodeLineRepetitions :: CodeStats -> SI
 csCodeLineRepetitions cs = sum $ map (\LineStats{..} -> if lsCode > 1 then lsCode else 0) $ T.elems $ csT cs
 
-csRepeatedCommentLines :: CodeStats -> Int
+csRepeatedCommentLines :: CodeStats -> SI
 csRepeatedCommentLines cs = sum $ map (\LineStats{..} -> if lsComment > 1 then 1 else 0) $ T.elems $ csT cs
 
-csCommentLineRepetitions :: CodeStats -> Int
+csCommentLineRepetitions :: CodeStats -> SI
 csCommentLineRepetitions cs = sum $ map (\LineStats{..} -> if lsComment > 1 then lsComment else 0) $ T.elems $ csT cs
 
-csDistinctNonEmptyCodeLines :: CodeStats -> Int
+csDistinctNonEmptyCodeLines :: CodeStats -> SI
 csDistinctNonEmptyCodeLines cs = sum $ map (\LineStats{..} -> if lsCode > 0 && lsEmpty == 0 then 1 else 0) $ T.elems $ csT cs
 
-csDistinctNonEmptyCommentLines :: CodeStats -> Int
+csDistinctNonEmptyCommentLines :: CodeStats -> SI
 csDistinctNonEmptyCommentLines cs = sum $ map (\LineStats{..} -> if lsComment > 0 && lsEmpty == 0 then 1 else 0) $ T.elems $ csT cs
 
 -- Traverse from 'top' directory and return all the relevant files
@@ -228,12 +226,11 @@ parseLines :: [B.ByteString] -> Bool -> [Regex] -> (Regex, Regex) -> T.Trie Line
 parseLines [] _ _ _ = mempty
 parseLines (l:ls) isMlcContinues slcs mlc@(mlcStart, mlcEnd) =
     mappend
-        ( T.singleton l (LineStats (fromEnum isCode) (fromEnum isComment) (fromEnum isEmpty)) )
+        ( T.singleton l (LineStats (Sum $ fromEnum isCode) (Sum $ fromEnum isComment) (Sum $ fromEnum (isEmpty l))) )
         ( parseLines ls mlcContinues slcs mlc )
     where
         isMlcStart = l =~ mlcStart
         isMlcEnd = l =~ mlcEnd
-        isEmpty = l == "" || l =~ rxEmpty -- The PCRE.Light library won't match empty strings on certain occasions (nullptr strings)
         isComment = isMlcContinues || (any ((=~) l) slcs)
         isCode = not isComment
         mlcContinues = isMlcStart || (isMlcContinues && not isMlcEnd)
@@ -260,21 +257,21 @@ main = do
 
     let stats = mconcat css
 
-    putStrLn $ "All lines:       " ++ show (csLines stats)
-    putStrLn $ "Code lines:      " ++ show (csCodeLines stats)
-    putStrLn $ "Comment lines:   " ++ show (csCommentLines stats)
-    putStrLn $ "Empty lines:     " ++ show (csEmptyLines stats)
+    putStrLn $ "All lines:       " ++ show (getSum $ csLines stats)
+    putStrLn $ "Code lines:      " ++ show (getSum $ csCodeLines stats)
+    putStrLn $ "Comment lines:   " ++ show (getSum $ csCommentLines stats)
+    putStrLn $ "Empty lines:     " ++ show (getSum $ csEmptyLines stats)
     putStrLn $ ""
-    putStrLn $ "Non-empty comment lines: " ++ show (csNonEmptyCommentLines stats)
-    putStrLn $ "Non-empty code lines:    " ++ show (csNonEmptyCodeLines stats)
+    putStrLn $ "Non-empty comment lines: " ++ show (getSum $ csNonEmptyCommentLines stats)
+    putStrLn $ "Non-empty code lines:    " ++ show (getSum $ csNonEmptyCodeLines stats)
     putStrLn $ ""
-    putStrLn $ "Repeating code lines: " ++ show (csRepeatedCodeLines stats)
-    putStrLn $ "Repetitions:          " ++ show (csCodeLineRepetitions stats)
+    putStrLn $ "Repeating code lines: " ++ show (getSum $ csRepeatedCodeLines stats)
+    putStrLn $ "Repetitions:          " ++ show (getSum $ csCodeLineRepetitions stats)
     putStrLn $ ""
-    putStrLn $ "Repeating comment lines: " ++ show (csRepeatedCommentLines stats)
-    putStrLn $ "Repetitions:             " ++ show (csCommentLineRepetitions stats)
+    putStrLn $ "Repeating comment lines: " ++ show (getSum $ csRepeatedCommentLines stats)
+    putStrLn $ "Repetitions:             " ++ show (getSum $ csCommentLineRepetitions stats)
     putStrLn $ ""
-    putStrLn $ "Distinct non-empty code lines:    " ++ show (csDistinctNonEmptyCodeLines stats)
-    putStrLn $ "Distinct non-empty comment lines: " ++ show (csDistinctNonEmptyCommentLines stats)
+    putStrLn $ "Distinct non-empty code lines:    " ++ show (getSum $ csDistinctNonEmptyCodeLines stats)
+    putStrLn $ "Distinct non-empty comment lines: " ++ show (getSum $ csDistinctNonEmptyCommentLines stats)
     putStrLn $ ""
     putStrLn $ "Languages: " ++ L.intercalate ", " (map show (S.toList (csLangs stats)))
