@@ -55,89 +55,85 @@ data Regex i = Regex
     , _acceptingStatesSlow    :: Integer
     }
 
-instance Num (Regex i) where
-    fromInteger n
-        | 0 == n    = Regex 0 0 f 0 0 g 0
-        | 0 <  n    = Regex 1 1 f 1 1 g 1
-        | otherwise = error "fromInteger[Regex]: Negative numbers unsupported"
-      where
+rxNone = Regex 0 0 f 0 0 g 0
+    where
         f _ _ = 0
         g _ _ = 0
-    {-# INLINE fromInteger #-}
 
-    (-) = error "[Regex] - [Regex]: subtraction unsupported"
+rxMT = Regex 1 1 f 1 1 g 1
+    where
+        f _ _ = 0
+        g _ _ = 0
 
-    abs = id
+(<+>) :: Regex t -> Regex t -> Regex t
+(<+>) (Regex nL asL fL bsL csL gL dsL) (Regex nR asR fR bsR csR gR dsR) =
+    Regex n as f bs cs g ds
+  where
+    n  = nL + nR
 
-    signum = error "signum[Regex]: unsupported"
+    as = Bits.unsafeShiftL asR nL .|. asL
 
-    Regex nL asL fL bsL csL gL dsL + Regex nR asR fR bsR csR gR dsR =
-        Regex n as f bs cs g ds
+    f i j =
+        if j < nL
+        then fL i j
+        else Bits.unsafeShiftL (fR i (j - nL)) nL
+
+    bs = Bits.unsafeShiftL bsR nL .|. bsL
+
+    cs = integerShiftL csR nL .|. csL
+
+    g i j =
+        if j < nL
+        then gL i j
+        else integerShiftL (gR i (j - nL)) nL
+
+    ds = integerShiftL dsR nL .|. dsL
+{-# INLINE (<+>) #-}
+
+(<*>) :: Regex t -> Regex t -> Regex t
+(<*>) (Regex nL asL fL bsL csL gL dsL) (Regex nR asR fR bsR csR gR dsR) =
+    asR' `seq` csR' `seq` Regex n as f bs cs g ds
+  where
+    n = nL + nR
+
+    asR' = Bits.unsafeShiftL asR nL
+
+    as =
+        if asL .&. bsL == 0
+        then asL
+        else asL .|. asR'
+
+    f i j =
+        if j < nL
+        then
+            if s .&. bsL == 0
+            then s
+            else s .|. asR'
+        else Bits.unsafeShiftL (fR i (j - nL)) nL
       where
-        n  = nL + nR
+        s = fL i j
 
-        as = Bits.unsafeShiftL asR nL .|. asL
+    bs = Bits.unsafeShiftL bsR nL
 
-        f i j =
-            if j < nL
-            then fL i j
-            else Bits.unsafeShiftL (fR i (j - nL)) nL
+    csR' = integerShiftL csR nL
 
-        bs = Bits.unsafeShiftL bsR nL .|. bsL
+    cs =
+        if csL .&. dsL == 0
+        then csL
+        else csR' .|. csL
 
-        cs = integerShiftL csR nL .|. csL
-
-        g i j =
-            if j < nL
-            then gL i j
-            else integerShiftL (gR i (j - nL)) nL
-
-        ds = integerShiftL dsR nL .|. dsL
-    {-# INLINE (+) #-}
-
-    Regex nL asL fL bsL csL gL dsL * Regex nR asR fR bsR csR gR dsR =
-        asR' `seq` csR' `seq` Regex n as f bs cs g ds
+    g i j =
+        if j < nL
+        then
+            if s .&. dsL == 0
+            then s
+            else s .|. csR'
+        else integerShiftL (gR i (j - nL)) nL
       where
-        n = nL + nR
+        s = gL i j
 
-        asR' = Bits.unsafeShiftL asR nL
-
-        as =
-            if asL .&. bsL == 0
-            then asL
-            else asL .|. asR'
-
-        f i j =
-            if j < nL
-            then
-                if s .&. bsL == 0
-                then s
-                else s .|. asR'
-            else Bits.unsafeShiftL (fR i (j - nL)) nL
-          where
-            s = fL i j
-
-        bs = Bits.unsafeShiftL bsR nL
-
-        csR' = integerShiftL csR nL
-
-        cs =
-            if csL .&. dsL == 0
-            then csL
-            else csR' .|. csL
-
-        g i j =
-            if j < nL
-            then
-                if s .&. dsL == 0
-                then s
-                else s .|. csR'
-            else integerShiftL (gR i (j - nL)) nL
-          where
-            s = gL i j
-
-        ds = integerShiftL dsR nL
-    {-# INLINE (*) #-}
+    ds = integerShiftL dsR nL
+{-# INLINE (<*>) #-}
 
 star :: Regex i -> Regex i
 star (Regex n as f bs cs g ds) = Regex n as f' as cs g' cs
