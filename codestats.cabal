@@ -1,5 +1,5 @@
 name:                codestats
-version:             0.1.0.0
+version:             0.1.1.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/giganetom/codestats
@@ -15,11 +15,12 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     Lib, Regex
+  exposed-modules:     Lib
   ghc-options:         -O2 -Wall
   build-depends:       base >= 4.7 && < 5
                      , bytestring
                      , pcre-light
+                     , bytestring-trie
                      , array
   default-language:    Haskell2010
 
@@ -27,12 +28,12 @@ executable codestats
   hs-source-dirs:      app
   main-is:             Main.hs
   ghc-options:         -O2 -Wall -threaded -rtsopts -with-rtsopts=-N
-  build-depends:       base
+  build-depends:       base >= 4.7 && < 5
                      , codestats
                      , generic-deriving
-                     , bytestring-trie
                      , bytestring
                      , pcre-light
+                     , bytestring-trie
                      , filepath
                      , directory
                      , unix
@@ -46,6 +47,7 @@ test-suite codestats-test
   build-depends:       base
                      , bytestring
                      , pcre-light
+                     , bytestring-trie
                      , codestats
                      , QuickCheck
   ghc-options:         -O2 -Wall -threaded -rtsopts -with-rtsopts=-N

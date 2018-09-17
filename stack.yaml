@@ -18,7 +18,9 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-11.22
+resolver: lts-12.9
+
+allow-newer: true
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -34,7 +36,12 @@ resolver: lts-11.22
 #  - auto-update
 #  - wai
 packages:
+- location:
+    git: git@github.com:netom/bytestring-trie.git
+    commit: 9e0b57cedcd7cb80aaa457c579007361f2e30dc3
+  extra-dep: true
 - .
+
 # Dependency packages to be pulled from upstream that are not in the resolver
 # using the same syntax as the packages field.
 # (e.g., acme-missiles-0.3)

@@ -71,13 +71,19 @@ data CodeStats = CodeStats
     , csLangs :: S.Set Language    -- Set of the names of the recognized programming languages used
     } deriving (Show, Generic)
 
+instance Semigroup LineStats where
+    (<>) = mappend
+
 instance Monoid LineStats where
-    mempty  = memptydefault
     mappend = mappenddefault
+    mempty  = memptydefault
+
+instance Semigroup CodeStats where
+    (<>) = mappend
 
 instance Monoid CodeStats where
-    mempty  = memptydefault
     mappend = mappenddefault
+    mempty  = memptydefault
 
 -- Build a regexp that non-greedily matches a string up until a closing string.
 -- Useful for building regexes matching for closing comment tokens such as --> or */
@@ -104,7 +110,7 @@ csCodeLines cs = sum $ map (\LineStats{..} -> lsCode) $ T.elems $ csT cs
 -- Number of lines with some comments
 csCommentLines :: CodeStats -> SI
 csCommentLines cs = sum $ map (\LineStats{..} -> lsComment) $ T.elems $ csT cs
- 
+
 -- Number of lines with some comments
 csEmptyLines :: CodeStats -> SI
 csEmptyLines cs = sum $ map (\LineStats{..} -> lsEmpty) $ T.elems $ csT cs
