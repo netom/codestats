@@ -38,6 +38,12 @@ executable codestats
                      , directory
                      , unix
                      , containers
+                     , text
+                     , aeson
+                     , lens
+                     , lens-aeson
+                     , unordered-containers
+                     , vector
   default-language:    Haskell2010
 
 test-suite codestats-test
