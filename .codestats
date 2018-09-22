@@ -1,7 +1,5 @@
-{ "excludes"   : ["^\\./\\.git/.*$", "^\\./\\.stack-work/.*$", "^\\.codestats$"]
+{ "excludes"   : ["\\..*"]
 , "categories" :
-    { "app":  "^\\./app/"
-    , "lib":  "^\\./src/"
-    , "test": "^\\./test/"
+    { "root":  ".*"
     }
 }

@@ -308,8 +308,8 @@ main = do
     -- Read configuration
     conf <- (^? _JSON) <$> TIO.readFile ".codestats" :: IO (Maybe Value)
 
-    let   excludes :: V.Vector Regex          = (cpl . TE.encodeUtf8 . (^. _String)) <$> conf ^. _Just . ix "excludes"   . _Array
-    let categories :: HM.HashMap T.Text Regex = (cpl . TE.encodeUtf8 . (^. _String)) <$> conf ^. _Just . ix "categories" . _Object
+    let   excludes :: V.Vector Regex          = (cpl . (\x -> "^\\./" <> x <> "$") . TE.encodeUtf8 . (^. _String)) <$> conf ^. _Just . ix "excludes"   . _Array
+    let categories :: HM.HashMap T.Text Regex = (cpl . (\x -> "^\\./" <> x <> "$") . TE.encodeUtf8 . (^. _String)) <$> conf ^. _Just . ix "categories" . _Object
 
     -- Generate a list of paths, weed out anything that matches any of the excludes
     paths :: [FilePath] <- filter (\p -> not $ any (\rx -> B.pack p =~ rx) excludes) <$> walk "."
