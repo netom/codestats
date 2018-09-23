@@ -37,6 +37,7 @@ import Data.Aeson
 
 data Language
     = Ada
+    | BGScript
     | C
     | Cabal
     | CSharp
@@ -48,7 +49,6 @@ data Language
     | HTML
     | Java
     | JavaScript
-    | TypeScript
     | JSON
     | Lisp
     | Perl
@@ -57,6 +57,7 @@ data Language
     | Ruby
     | Shell
     | SQL
+    | TypeScript
     | XML
     | Yaml
     | Zsh
@@ -178,10 +179,13 @@ walk top = do
 langsByExtensions :: [(B.ByteString, Language)]
 langsByExtensions =
     [ (".ada", Ada)
+    , (".bgs", BGScript)
     , (".c", C)
+    , (".h", C)
     , (".cabal", Cabal)
     , (".cs", CSharp)
     , (".cpp", Cplusplus)
+    , (".hpp", Cplusplus)
     , (".coffee", CoffeeScript)
     , (".css", CSS)
     , (".go", Go)
@@ -189,7 +193,6 @@ langsByExtensions =
     , (".html", HTML)
     , (".java", Java)
     , (".js", JavaScript)
-    , (".ts", TypeScript)
     , (".json", JSON)
 
     , (".el", Lisp)
@@ -206,6 +209,7 @@ langsByExtensions =
     , (".rb", Ruby)
     , (".sh", Shell)
     , (".sql", SQL)
+    , (".ts", TypeScript)
     , (".xml", XML)
 
     , (".yaml", Yaml)
@@ -226,6 +230,7 @@ fileLanguage p =
 -- Comment parsing is buggy, yes. And butt ugly too.
 langRXs :: Language -> ([Regex], (Regex, Regex))
 langRXs Ada = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+langRXs BGScript = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs C = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs Cabal = ([cpl "^\\s*--"], (cpl "a^", cpl "a^"))
 langRXs CSharp = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
@@ -237,7 +242,6 @@ langRXs Haskell = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
 langRXs HTML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
 langRXs Java = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs JavaScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
-langRXs TypeScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs JSON = ([cpl "a^"], (cpl "a^", cpl "a^"))
 langRXs Lisp = ([cpl "^[ \\t]*;", cpl "^[ \\t]*;;", cpl "^[ \\t]*;;;", cpl "^[ \\t]*;;;;"], (cpl "a^", cpl "a^"))
 langRXs Perl = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
@@ -248,6 +252,7 @@ langRXs Python = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs Ruby = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs Shell = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
 langRXs SQL = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
+langRXs TypeScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs XML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
 langRXs Yaml = ([cpl "a^"], (cpl "a^", cpl "a^"))
 langRXs Zsh = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
