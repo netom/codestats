@@ -48,6 +48,7 @@ data Language
     | HTML
     | Java
     | JavaScript
+    | TypeScript
     | JSON
     | Lisp
     | Perl
@@ -188,6 +189,7 @@ langsByExtensions =
     , (".html", HTML)
     , (".java", Java)
     , (".js", JavaScript)
+    , (".ts", TypeScript)
     , (".json", JSON)
 
     , (".el", Lisp)
@@ -235,6 +237,7 @@ langRXs Haskell = ([cpl "^[ \\t]*--"], (cpl "a^", cpl "a^"))
 langRXs HTML = ([cpl "^[ \\t]*<!--.*-->[ \\t]*$"], (cpl "<!--", cpl "-->"))
 langRXs Java = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs JavaScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
+langRXs TypeScript = ([cpl "^[ \\t]*//", cpl "^[ \\t]*/\\*.*\\*/[ \\t]*$"], (cpl "/\\*", cpl "\\*/"))
 langRXs JSON = ([cpl "a^"], (cpl "a^", cpl "a^"))
 langRXs Lisp = ([cpl "^[ \\t]*;", cpl "^[ \\t]*;;", cpl "^[ \\t]*;;;", cpl "^[ \\t]*;;;;"], (cpl "a^", cpl "a^"))
 langRXs Perl = ([cpl "^[ \\t]*#"], (cpl "a^", cpl "a^"))
