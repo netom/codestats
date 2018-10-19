@@ -1,9 +1,9 @@
 # CodeStats
 
-Creates statistics about source codes, much like cloc or similar 
+Creates statistics about source codes, much like [cloc](https://github.com/AlDanial/cloc) or similar 
 programs. Same-same, only different.
 
-WARNING: this project is **highly** experimental.
+WARNING: this project is **highly** experimental. Use it at your own risk!
 
 CodeStat can be used in a directory to scan a whole project.
 
